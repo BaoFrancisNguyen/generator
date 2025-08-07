@@ -1202,6 +1202,21 @@ def get_real_data_status():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+    
+try:
+    from complete_integration import create_complete_integration
+    
+    # Intégrer le prédicteur
+    prediction_integrated = create_complete_integration(app, generator)
+    
+    if prediction_integrated:
+        logger.info("🔮 Prédicteur de bâtiments intégré avec succès!")
+    else:
+        logger.warning("⚠️ Prédicteur en mode fallback")
+        
+except ImportError as e:
+    logger.warning(f"Prédicteur non disponible: {e}")
+    logger.info("Application fonctionnera sans prédicteur en temps réel")
 
 
 if __name__ == '__main__':
