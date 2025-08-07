@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🇲🇾⚡ Générateur de Données Électriques - Malaisie</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🇲🇾⚡ Générateur de Données Électriques</h1>
+            <p style="font-size: 1.2em; opacity: 0.9;">Malaisie - Données ultra-réalistes avec climat tropical</p>
+        </div>
+
+        <!-- Formulaire principal -->
+        <div class="card">
+            <h2>📊 Configuration de la Génération</h2>
+            
+            <!-- Section de filtrage géographique -->
+            <div class="card" style="background: #f8f9fa; margin-bottom: 25px;">
+                <h3 style="color: #495057; margin-bottom: 20px;">🗺️ Filtrage Géographique</h3>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="locationMode">Mode de Localisation</label>
+                        <select id="locationMode" onchange="toggleLocationMode()">
+                            <option value="all">🇲🇾 Toute la Malaisie</option>
+                            <option value="filter">🎯 Filtrer par zone</option>
+                            <option value="custom">➕ Localisation personnalisée</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Filtres par zone -->
+                <div id="filterSection" style="display: none;">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="filterRegion">🌏 Région</label>
+                            <select id="filterRegion" onchange="updateStateOptions()">
+                                <option value="all">Toutes les régions</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="filterState">🏛️ État</label>
+                            <select id="filterState" onchange="updateCityOptions()">
+                                <option value="all">Tous les états</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="filterCity">🏙️ Ville</label>
+                            <select id="filterCity">
+                                <option value="all">Toutes les villes</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="populationRange">👥 Population</label>
+                            <select id="populationRange" onchange="updatePopulationInputs()">
+                                <option value="all">Toutes tailles</option>
+                                <option value="large">Grandes villes (>500K)</option>
+                                <option value="medium">Villes moyennes (200K-500K)</option>
+                                <option value="small">Petites villes (<200K)</option>
+                                <option value="custom">Plage personnalisée</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="customPopulationRange" style="display: none;">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="popMin">Population Min</label>
+                                <input type="number" id="popMin" placeholder="Ex: 50000">
+                            </div>
+                            <div class="form-group">
+                                <label for="popMax">Population Max</label>
+                                <input type="number" id="popMax" placeholder="Ex: 1000000">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Localisation personnalisée -->
+                <div id="customSection" style="display: none;">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="customCity">🏙️ Nom de la Ville</label>
+                            <input type="text" id="customCity" placeholder="Ex: Nouvelle Ville">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="customState">🏛️ État/Province</label>
+                            <input type="text" id="customState" placeholder="Ex: Nouvel État">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="customRegion">🌏 Région</label>
+                            <select id="customRegion">
+                                <option value="Central">Central</option>
+                                <option value="Northern">Northern</option>
+                                <option value="Southern">Southern</option>
+                                <option value="East Coast">East Coast</option>
+                                <option value="East Malaysia">East Malaysia</option>
+                                <option value="Custom">Région personnalisée</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="customPopulation">👥 Population</label>
+                            <input type="number" id="customPopulation" placeholder="Ex: 250000">
+                        </div>
+                    </div>
+                    
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="customLat">📍 Latitude</label>
+                            <input type="number" step="0.000001" id="customLat" placeholder="Ex: 3.1390">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="customLon">📍 Longitude</label>
+                            <input type="number" step="0.000001" id="customLon" placeholder="Ex: 101.6869">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="numBuildings">🏢 Nombre de Bâtiments</label>
+                    <input type="number" id="numBuildings" value="50" min="1" max="10000" onchange="updateEstimation()" oninput="updateEstimation()">
+                    <small id="buildingGuidance" style="color: #666; font-size: 0.9em; margin-top: 5px; display: block;"></small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="freq">⏰ Fréquence d'Échantillonnage</label>
+                    <select id="freq" onchange="updateEstimation()">
+                        <option value="5T">5 minutes (très détaillé)</option>
+                        <option value="15T">15 minutes (détaillé)</option>
+                        <option value="30T" selected>30 minutes</option>
+                        <option value="1H">1 heure (standard)</option>
+                        <option value="2H">2 heures</option>
+                        <option value="6H">6 heures</option>
+                        <option value="12H">12 heures (2x/jour)</option>
+                        <option value="1D">1 jour (quotidien)</option>
+                        <option value="1W">1 semaine (hebdomadaire)</option>
+                        <option value="1M">1 mois (mensuel)</option>
+                    </select>
+                    <small id="freqInfo" style="color: #666; font-size: 0.9em;"></small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="startDate">📅 Date de Début</label>
+                    <input type="date" id="startDate" value="2024-01-01" onchange="updateEstimation()">
+                </div>
+                
+                <div class="form-group">
+                    <label for="endDate">📅 Date de Fin</label>
+                    <input type="date" id="endDate" value="2024-01-31" onchange="updateEstimation()">
+                </div>
+            </div>
+            
+            <!-- Section d'estimation -->
+            <div class="estimation-card" id="estimationCard">
+                <h3>📊 Estimation du Dataset</h3>
+                <div class="estimation-grid">
+                    <div class="estimation-item">
+                        <span class="estimation-label">📈 Observations totales:</span>
+                        <span class="estimation-value" id="totalObservations">-</span>
+                    </div>
+                    <div class="estimation-item">
+                        <span class="estimation-label">💾 Taille fichier (~):</span>
+                        <span class="estimation-value" id="fileSize">-</span>
+                    </div>
+                    <div class="estimation-item">
+                        <span class="estimation-label">⏱️ Temps génération (~):</span>
+                        <span class="estimation-value" id="generationTime">-</span>
+                    </div>
+                    <div class="estimation-item">
+                        <span class="estimation-label">🎯 Cas d'usage:</span>
+                        <span class="estimation-value" id="useCase">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Section de recommandations -->
+            <div class="guidance-section">
+                <h4>💡 Guide de Configuration</h4>
+                <div class="guidance-recommendations">
+                    <div class="recommendation-item">
+                        <strong>🧪 Test Rapide</strong><br>
+                        5-20 bâtiments, 1 semaine, 1H<br>
+                        <em>~3K observations, <10s</em>
+                    </div>
+                    <div class="recommendation-item">
+                        <strong>📚 Développement</strong><br>
+                        50-200 bâtiments, 1-3 mois, 30T<br>
+                        <em>~200K observations, 1-3min</em>
+                    </div>
+                    <div class="recommendation-item">
+                        <strong>🤖 Machine Learning</strong><br>
+                        200-1000 bâtiments, 6-12 mois, 1H<br>
+                        <em>~1M observations, 5-10min</em>
+                    </div>
+                    <div class="recommendation-item">
+                        <strong>🏭 Production</strong><br>
+                        1000-5000 bâtiments, 1-3 ans, 30T<br>
+                        <em>~20M observations, 20+ min</em>
+                    </div>
+                    <div class="recommendation-item">
+                        <strong>📊 Analyse Quotidienne</strong><br>
+                        100-500 bâtiments, 1 an, 1D<br>
+                        <em>~180K observations, 1min</em>
+                    </div>
+                    <div class="recommendation-item">
+                        <strong>📈 Tendances Long Terme</strong><br>
+                        1000+ bâtiments, 5+ ans, 1W/1M<br>
+                        <em>~500K observations, 3-5min</em>
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn" onclick="generateData()">🚀 Générer et Visualiser</button>
+                <button class="btn btn-success" onclick="downloadData()">💾 Générer et Télécharger</button>
+                <button class="btn btn-warning" onclick="showSample()">👁️ Voir un Échantillon</button>
+            </div>
+        </div>
+
+        <!-- Zone de chargement -->
+        <div class="loading" id="loading">
+            <h2>🌴 Génération en cours pour la Malaisie...</h2>
+            <p>Création de données électriques tropicales réalistes, veuillez patienter.</p>
+            <div style="margin-top: 20px;">
+                <div class="spinner"></div>
+            </div>
+        </div>
+
+        <!-- Résultats -->
+        <div class="results" id="results">
+            <div id="alerts"></div>
+            <div class="stats-grid" id="statsGrid"></div>
+            <div id="dataPreview"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
