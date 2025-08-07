@@ -1,15 +1,15 @@
-# 🇲🇾⚡ Générateur de Données Électriques pour la Malaisie
+#Générateur de Données Électriques pour la Malaisie
 
-## 📖 Description
+## Description
 
 Application Flask qui génère des données synthétiques réalistes de consommation électrique spécialement adaptées à la **Malaisie**. Basée sur l'analyse de vrais datasets de demande électrique, elle produit des séries temporelles avec des patterns climatiques tropicaux, des spécificités culturelles malaisiennes, et des coordonnées géographiques précises.
 
-### 🎯 Objectif
+### Objectif
 Créer des datasets de test/entraînement pour l'analyse de consommation électrique en Malaisie avec des caractéristiques ultra-réalistes.
 
 ---
 
-## 🚀 Installation
+## Installation
 
 ### Prérequis
 - Python 3.8+
@@ -19,7 +19,7 @@ Créer des datasets de test/entraînement pour l'analyse de consommation électr
 
 ```bash
 # 1. Cloner ou télécharger le projet
-cd votre-dossier-projet
+git clone https://github.com/BaoFrancisNguyen/generator
 
 # 2. Créer un environnement virtuel (recommandé)
 python -m venv venv
@@ -49,18 +49,19 @@ projet/
 
 ---
 
-## 🌐 Interface Utilisateur
+## Interface Utilisateur
 
 ### Accès
 Une fois l'application lancée, ouvrir dans le navigateur :
+
 - **Interface principale** : http://localhost:5000
 - **API statistiques** : http://localhost:5000/api/stats
 
 ### Interface Web
 
-L'application propose une interface moderne avec 3 sections principales :
+L'application propose une interfaceavec 3 se ctions principales :
 
-#### 1. **Formulaire de Configuration** 📊
+#### 1. **Formulaire de Configuration**
 
 | Champ | Type | Description | Valeurs | Défaut |
 |-------|------|-------------|---------|--------|
@@ -75,15 +76,15 @@ L'application propose une interface moderne avec 3 sections principales :
 - **15T** = 15 minutes
 - Plus la période est longue, plus les patterns saisonniers sont visibles
 
-#### 2. **Boutons d'Action** 🎮
+#### 2. **Boutons d'Action**
 
 | Bouton | Fonction | Résultat |
 |--------|----------|----------|
-| **🚀 Générer et Visualiser** | Crée les données et les affiche dans l'interface | Aperçu immédiat + statistiques |
-| **💾 Générer et Télécharger** | Crée les données et les sauvegarde en fichiers | 2 fichiers .parquet |
-| **👁️ Voir un Échantillon** | Génère un petit exemple (5 bâtiments, 2 jours) | Démonstration rapide |
+| ** Générer et Visualiser** | Crée les données et les affiche dans l'interface | Aperçu immédiat + statistiques |
+| ** Générer et Télécharger** | Crée les données et les sauvegarde en fichiers | 2 fichiers .parquet |
+| ** Voir un Échantillon** | Génère un petit exemple (5 bâtiments, 2 jours) | Démonstration rapide |
 
-#### 3. **Zone de Résultats** 📈
+#### 3. **Zone de Résultats**
 
 Après génération, affichage de :
 - **Statistiques** : Nombre d'observations, moyenne, maximum, etc.
@@ -92,7 +93,7 @@ Après génération, affichage de :
 
 ---
 
-## 📊 Inputs (Entrées)
+## Inputs (Entrées)
 
 ### Paramètres de Configuration
 
@@ -114,9 +115,9 @@ Après génération, affichage de :
 
 ---
 
-## 📈 Outputs (Sorties)
+## Outputs (Sorties)
 
-### 1. **Fichiers Générés** 💾
+### 1. **Fichiers Générés**
 
 Lors du téléchargement, 2 fichiers .parquet sont créés dans le dossier `generated_data/` :
 
@@ -147,7 +148,7 @@ Lors du téléchargement, 2 fichiers .parquet sont créés dans le dossier `gene
 | `timestamp` | Datetime | Horodatage précis | `2024-01-01 00:30:00` |
 | `y` | Float | Consommation électrique (kWh) | `45.672` |
 
-### 2. **Visualisation Web** 🖥️
+### 2. **Visualisation Web**
 
 #### **Statistiques Affichées**
 - **Total des observations** : Nombre de lignes générées
@@ -159,7 +160,7 @@ Lors du téléchargement, 2 fichiers .parquet sont créés dans le dossier `gene
 - **Métadonnées** : 10 premiers bâtiments avec villes, types, coordonnées
 - **Consommation** : 15 premières observations avec timestamps
 
-### 3. **API REST** 🔌
+### 3. **API REST**
 
 #### **Endpoint : `/api/stats`** (GET)
 Retourne les informations sur le générateur :
@@ -190,7 +191,7 @@ Retourne les informations sur le générateur :
 
 ## 🇲🇾 Spécificités Malaisie
 
-### 🏙️ **Villes Réelles** (60+ localisations)
+### **Villes Réelles** (60+ localisations)
 
 Le générateur utilise de vraies villes malaisiennes avec leurs données démographiques :
 
@@ -200,7 +201,7 @@ Le générateur utilise de vraies villes malaisiennes avec leurs données démog
 | **Villes moyennes** | Ipoh, Kuantan, Kota Kinabalu | 200K - 400K | Équilibre résidentiel/commercial |
 | **Petites villes** | Langkawi, Mersing, Beaufort | 35K - 200K | Majoritairement résidentiel |
 
-### 🌴 **Patterns Climatiques Tropicaux**
+### **Patterns Climatiques Tropicaux**
 
 #### **Facteurs Horaires**
 - **6h-8h** : Pic matinal (avant la chaleur)
@@ -216,7 +217,7 @@ Le générateur utilise de vraies villes malaisiennes avec leurs données démog
 | **Mai-Août** | Saison sèche | 1.3-1.7× | **Maximum de climatisation** |
 | **Sep-Oct** | Variable | 1.0-1.3× | Climat changeant |
 
-### 🕌 **Spécificités Culturelles**
+### **Spécificités Culturelles**
 
 #### **Patterns Hebdomadaires**
 - **Vendredi après-midi** : Réduction d'activité (prière du vendredi)
@@ -227,7 +228,7 @@ Le générateur utilise de vraies villes malaisiennes avec leurs données démog
 - **4h-17h** : Consommation résidentielle réduite de 40% (jeûne)
 - **18h-23h** : Consommation résidentielle augmentée de 40% (Iftar, activités nocturnes)
 
-### ⚡ **Types de Bâtiments**
+### **Types de Bâtiments**
 
 | Type | Consommation Base | Consommation Pic | Facteur Nuit | Usage Principal |
 |------|------------------|------------------|--------------|----------------|
@@ -312,7 +313,7 @@ app.run(debug=True, host='0.0.0.0', port=5000)
 
 ---
 
-## 📊 Exemples d'Usage
+## Exemples d'Usage
 
 ### 1. **Dataset de Test Rapide**
 ```
@@ -340,7 +341,7 @@ Fréquence: 30T
 
 ---
 
-## 🔗 Intégration
+## Intégration
 
 ### Avec Pandas
 ```python
@@ -376,7 +377,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
 ---
 
-## 📋 Checklist de Validation
+## Checklist de Validation
 
 Avant d'utiliser les données générées, vérifiez :
 
@@ -390,7 +391,7 @@ Avant d'utiliser les données générées, vérifiez :
 
 ---
 
-## 🤝 Contribution
+## Contribution
 
 Pour améliorer le générateur :
 
@@ -402,13 +403,13 @@ Pour améliorer le générateur :
 
 ---
 
-## 📄 Licence
+## Licence
 
 Projet open-source pour usage éducatif et recherche.
 
 ---
 
-## 🆘 Support
+## Support
 
 En cas de problème :
 1. Vérifier cette documentation
@@ -417,5 +418,3 @@ En cas de problème :
 4. Vérifier les permissions de fichiers
 
 ---
-
-*Générateur développé pour créer des datasets électriques ultra-réalistes spécifiques à la Malaisie, avec patterns climatiques tropicaux et spécificités culturelles locales.*
