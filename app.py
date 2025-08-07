@@ -6,21 +6,42 @@ from datetime import datetime, timedelta
 import uuid
 import os
 import json
+from building_distribution import BuildingDistributor
+
+# Import du système de validation
+try:
+    from integration_validation import IntegratedValidator
+    VALIDATION_ENABLED = True
+    print("✅ Système de validation chargé")
+except ImportError as e:
+    print(f"⚠️ Validation non disponible: {e}")
+    VALIDATION_ENABLED = False
 
 app = Flask(__name__)
 
 class ElectricityDataGenerator:
-    """Générateur de données électriques réalistes pour la Malaisie"""
+    """Générateur de données électriques réalistes pour la Malaisie avec validation intégrée"""
     
     def __init__(self):
-        # Types de bâtiments
+        # Instance du distributeur de bâtiments
+        self.building_distributor = BuildingDistributor()
+        
+        # Instance du validateur (si disponible)
+        if VALIDATION_ENABLED:
+            self.validator = IntegratedValidator()
+            print("🔍 Validateur intégré activé")
+        else:
+            self.validator = None
+            print("⚠️ Validateur non disponible - fonctionnement en mode standard")
+        
+        # Types de bâtiments mis à jour (ajout de Clinic)
         self.building_classes = [
             'Residential', 'Commercial', 'Industrial', 'Office', 
-            'Retail', 'Hospital', 'School', 'Hotel', 'Restaurant',
+            'Retail', 'Hospital', 'Clinic', 'School', 'Hotel', 'Restaurant',
             'Warehouse', 'Factory', 'Apartment'
         ]
         
-        # Localisations réelles de Malaisie avec populations
+        # Localisations réelles de Malaisie avec populations (données complètes)
         self.malaysia_locations = {
             # États (Negeri) - Grandes villes
             'Kuala Lumpur': {'population': 1800000, 'state': 'Federal Territory', 'region': 'Central'},
@@ -96,7 +117,7 @@ class ElectricityDataGenerator:
         # Fuseau horaire de la Malaisie
         self.timezones = ['Asia/Kuala_Lumpur']
         
-        # Patterns de consommation réalistes (en kWh basés sur votre dataset)
+        # Patterns de consommation réalistes mis à jour (ajout de Clinic)
         self.consumption_patterns = {
             'Residential': {'base': 0.5, 'peak': 12.0, 'variance': 2.5, 'night_factor': 0.3},
             'Commercial': {'base': 5.0, 'peak': 80.0, 'variance': 15.0, 'night_factor': 0.2},
@@ -104,6 +125,7 @@ class ElectricityDataGenerator:
             'Office': {'base': 3.0, 'peak': 45.0, 'variance': 8.0, 'night_factor': 0.1},
             'Retail': {'base': 2.0, 'peak': 35.0, 'variance': 6.0, 'night_factor': 0.15},
             'Hospital': {'base': 25.0, 'peak': 70.0, 'variance': 12.0, 'night_factor': 0.8},
+            'Clinic': {'base': 2.0, 'peak': 15.0, 'variance': 3.0, 'night_factor': 0.1},
             'School': {'base': 1.0, 'peak': 25.0, 'variance': 5.0, 'night_factor': 0.05},
             'Hotel': {'base': 8.0, 'peak': 40.0, 'variance': 8.0, 'night_factor': 0.6},
             'Restaurant': {'base': 3.0, 'peak': 60.0, 'variance': 15.0, 'night_factor': 0.2},
@@ -118,7 +140,7 @@ class ElectricityDataGenerator:
     
     def generate_coordinates(self, location):
         """Génère des coordonnées GPS réalistes pour la Malaisie"""
-        # Coordonnées précises des villes de Malaisie
+        # Coordonnées précises des villes de Malaisie (version complète)
         coords = {
             # Péninsule malaise - Région centrale
             'Kuala Lumpur': {'lat': (3.1319, 3.1681), 'lon': (101.6841, 101.7381)},
@@ -204,15 +226,13 @@ class ElectricityDataGenerator:
         return lat, lon
     
     def generate_building_metadata(self, num_buildings=100, location_filter=None, custom_location=None):
-        """Génère les métadonnées des bâtiments avec filtrage géographique"""
+        """Génère les métadonnées des bâtiments avec distribution réaliste selon les villes"""
         buildings = []
         
         # Déterminer les localisations disponibles
         if custom_location:
-            # Utiliser la localisation personnalisée
             available_locations = {custom_location['name']: custom_location}
         elif location_filter:
-            # Filtrer selon les critères
             available_locations = {}
             for name, info in self.malaysia_locations.items():
                 include = True
@@ -240,72 +260,118 @@ class ElectricityDataGenerator:
                 if include:
                     available_locations[name] = info
         else:
-            # Utiliser toutes les localisations
             available_locations = self.malaysia_locations
         
         if not available_locations:
             raise ValueError("Aucune localisation ne correspond aux critères de filtrage")
         
-        # Obtenir la liste des villes avec pondération par population
+        # Calculer la répartition des bâtiments par ville (pondérée par population)
         locations = list(available_locations.keys())
         populations = [available_locations[loc]['population'] for loc in locations]
-        
-        # Normaliser les poids
         total_pop = sum(populations)
         weights = [pop / total_pop for pop in populations]
         
-        for i in range(num_buildings):
-            unique_id = self.generate_unique_id()
-            
-            # Choisir une localisation pondérée par la population
-            location = np.random.choice(locations, p=weights)
+        # Distribuer les bâtiments aux villes
+        city_building_counts = {}
+        for i, location in enumerate(locations):
+            count = max(1, int(num_buildings * weights[i]))
+            city_building_counts[location] = count
+        
+        # Ajuster pour avoir exactement num_buildings
+        total_assigned = sum(city_building_counts.values())
+        if total_assigned != num_buildings:
+            # Ajuster sur la plus grande ville
+            largest_city = max(locations, key=lambda x: available_locations[x]['population'])
+            city_building_counts[largest_city] += (num_buildings - total_assigned)
+        
+        print(f"🏙️ Répartition des bâtiments par ville:")
+        for city, count in sorted(city_building_counts.items(), key=lambda x: x[1], reverse=True):
+            if count > 0:
+                print(f"  {city}: {count} bâtiments")
+        
+        # Générer les bâtiments pour chaque ville avec distribution réaliste
+        building_id_counter = 1
+        
+        for location, building_count in city_building_counts.items():
+            if building_count <= 0:
+                continue
+                
             location_info = available_locations[location]
             
-            # Adapter le type de bâtiment selon la taille de la ville
-            if location_info['population'] > 500000:  # Grandes villes
-                building_class = random.choices(
-                    self.building_classes,
-                    weights=[15, 25, 15, 20, 10, 5, 3, 5, 2, 0, 0, 0]
-                )[0]
-            elif location_info['population'] > 200000:  # Villes moyennes
-                building_class = random.choices(
-                    self.building_classes,
-                    weights=[25, 20, 10, 15, 15, 5, 5, 3, 2, 0, 0, 0]
-                )[0]
-            else:  # Petites villes
-                building_class = random.choices(
-                    self.building_classes,
-                    weights=[35, 15, 8, 10, 12, 5, 10, 3, 2, 0, 0, 0]
-                )[0]
+            # Obtenir la distribution réaliste des types de bâtiments pour cette ville
+            building_distribution = self.building_distributor.calculate_building_distribution(
+                location, location_info['population'], location_info['region'], building_count
+            )
             
-            lat, lon = self.generate_coordinates(location)
+            print(f"📊 Distribution pour {location} ({location_info['population']:,} hab.):")
+            for building_type, count in sorted(building_distribution.items(), key=lambda x: x[1], reverse=True):
+                if count > 0:
+                    print(f"  - {building_type}: {count}")
             
-            # Taille du cluster basée sur la population de la ville
-            cluster_multiplier = min(location_info['population'] / 100000, 5.0)
-            cluster_size = random.randint(1, max(1, int(50 * cluster_multiplier)))
+            # Créer une liste ordonnée des types de bâtiments pour cette ville
+            building_types_list = []
+            for building_type, count in building_distribution.items():
+                building_types_list.extend([building_type] * count)
             
-            building = {
-                'unique_id': unique_id,
-                'dataset': 'malaysia_electricity_v1',
-                'building_id': f'MY_{location_info["state"][:3].upper()}_{i+1:06d}',
-                'location_id': f'MY_{hash(location) % 100000:05d}',
-                'latitude': lat,
-                'longitude': lon,
-                'location': location,
-                'state': location_info['state'],
-                'region': location_info['region'],
-                'population': location_info['population'],
-                'timezone': 'Asia/Kuala_Lumpur',
-                'building_class': building_class,
-                'cluster_size': cluster_size,
-                'freq': '30T'
-            }
-            buildings.append(building)
+            # Mélanger pour éviter les patterns
+            random.shuffle(building_types_list)
+            
+            # Générer les bâtiments
+            for i in range(building_count):
+                unique_id = self.generate_unique_id()
+                
+                # Sélectionner le type de bâtiment selon la distribution
+                if i < len(building_types_list):
+                    building_class = building_types_list[i]
+                else:
+                    # Fallback au résidentiel si on dépasse
+                    building_class = 'Residential'
+                
+                lat, lon = self.generate_coordinates(location)
+                
+                # Taille du cluster basée sur la population de la ville
+                cluster_multiplier = min(location_info['population'] / 100000, 5.0)
+                cluster_size = random.randint(1, max(1, int(50 * cluster_multiplier)))
+                
+                building = {
+                    'unique_id': unique_id,
+                    'dataset': 'malaysia_electricity_v1',
+                    'building_id': f'MY_{location_info["state"][:3].upper()}_{building_id_counter:06d}',
+                    'location_id': f'MY_{hash(location) % 100000:05d}',
+                    'latitude': lat,
+                    'longitude': lon,
+                    'location': location,
+                    'state': location_info['state'],
+                    'region': location_info['region'],
+                    'population': location_info['population'],
+                    'timezone': 'Asia/Kuala_Lumpur',
+                    'building_class': building_class,
+                    'cluster_size': cluster_size,
+                    'freq': '30T'
+                }
+                buildings.append(building)
+                building_id_counter += 1
+        
+        # Afficher le résumé final
+        final_distribution = {}
+        for building in buildings:
+            building_type = building['building_class']
+            final_distribution[building_type] = final_distribution.get(building_type, 0) + 1
+        
+        print(f"\n📋 Distribution finale totale ({len(buildings)} bâtiments):")
+        for building_type, count in sorted(final_distribution.items(), key=lambda x: x[1], reverse=True):
+            percentage = (count / len(buildings)) * 100
+            print(f"  - {building_type}: {count} ({percentage:.1f}%)")
         
         return pd.DataFrame(buildings)
     
     def calculate_realistic_consumption(self, building_class, timestamp, location_info=None):
         """Calcule une consommation électrique ultra-réaliste pour la Malaisie"""
+        # Vérifier si le type de bâtiment existe dans nos patterns
+        if building_class not in self.consumption_patterns:
+            print(f"⚠️ Warning: Building class '{building_class}' not found, using Residential")
+            building_class = 'Residential'
+            
         pattern = self.consumption_patterns[building_class]
         
         hour = timestamp.hour
@@ -322,7 +388,7 @@ class ElectricityDataGenerator:
         elif 22 <= hour <= 6:  # Nuit plus fraîche
             climate_factor = 0.8 + 0.3 * random.random()
         
-        # 1. Facteur horaire adapté au climat tropical malaisien
+        # Facteur horaire spécialisé par type de bâtiment
         if building_class == 'Residential':
             if 6 <= hour <= 8:  # Matin avant la chaleur
                 hour_factor = 0.6 + 0.3 * np.sin((hour - 6) * np.pi / 2)
@@ -357,12 +423,23 @@ class ElectricityDataGenerator:
             else:  # Fin d'après-midi/soirée
                 hour_factor = 0.7 + 0.3 * random.random()
                 
-        elif building_class == 'Hospital':
+        elif building_class in ['Hospital', 'Clinic']:
             base_factor = 0.8 + 0.2 * random.random()
-            if 11 <= hour <= 16:  # Climatisation renforcée
-                hour_factor = base_factor * 1.2
+            if building_class == 'Hospital':
+                # Hôpitaux - fonctionnement constant
+                if 11 <= hour <= 16:  # Climatisation renforcée
+                    hour_factor = base_factor * 1.2
+                else:
+                    hour_factor = base_factor
             else:
-                hour_factor = base_factor
+                # Cliniques - heures d'ouverture
+                if 7 <= hour <= 19:
+                    if 11 <= hour <= 16:  # Clim pendant les heures chaudes
+                        hour_factor = base_factor * 1.3
+                    else:
+                        hour_factor = base_factor
+                else:
+                    hour_factor = 0.1 + 0.1 * random.random()
                 
         elif building_class == 'School':
             if 7 <= hour <= 15 and not is_weekend:
@@ -390,8 +467,8 @@ class ElectricityDataGenerator:
             else:
                 hour_factor = pattern['night_factor'] + 0.3 * random.random()
         
-        # 2. Facteur hebdomadaire adapté à la culture malaisienne
-        if building_class in ['Commercial', 'Office']:
+        # Facteur hebdomadaire adapté à la culture malaisienne
+        if building_class in ['Commercial', 'Office', 'Clinic']:
             # Vendredi après-midi moins actif (prière du vendredi)
             if day_of_week == 4 and hour >= 12:  # Vendredi après-midi
                 week_factor = 0.7
@@ -416,7 +493,7 @@ class ElectricityDataGenerator:
         else:
             week_factor = 0.8 if is_weekend else 1.0
         
-        # 3. Facteur saisonnier pour la Malaisie
+        # Facteur saisonnier pour la Malaisie
         if month in [11, 12, 1, 2]:  # Saison des pluies
             season_factor = 0.9 + 0.2 * random.random()  # Moins de clim
         elif month in [5, 6, 7, 8]:  # Saison sèche chaude
@@ -426,7 +503,7 @@ class ElectricityDataGenerator:
         else:  # Octobre, septembre - variable
             season_factor = 1.0 + 0.3 * random.random()
         
-        # 4. Facteur selon la taille de la ville
+        # Facteur selon la taille de la ville
         if location_info:
             if location_info['population'] > 500000:  # Grandes villes
                 city_factor = 1.2 + 0.2 * random.random()  # Plus développé
@@ -437,24 +514,24 @@ class ElectricityDataGenerator:
         else:
             city_factor = 1.0
         
-        # 5. Calcul de la consommation de base
+        # Calcul de la consommation de base
         base_consumption = pattern['base'] + (pattern['peak'] - pattern['base']) * hour_factor
         
-        # 6. Application de tous les facteurs
+        # Application de tous les facteurs
         consumption = (base_consumption * week_factor * season_factor * 
                       climate_factor * city_factor)
         
-        # 7. Ajout de bruit réaliste
+        # Ajout de bruit réaliste
         noise = np.random.normal(0, pattern['variance'] * 0.15)
         consumption = max(0, consumption + noise)
         
-        # 8. Événements spéciaux spécifiques à la Malaisie
+        # Événements spéciaux spécifiques à la Malaisie
         if random.random() < 0.003:  # 0.3% de chance de coupure de courant
             consumption = 0.0
         elif random.random() < 0.015:  # 1.5% de chance de pic (orage, etc.)
             consumption *= 1.4 + 0.8 * random.random()
         
-        # 9. Période de Ramadan (consommation différente)
+        # Période de Ramadan (consommation différente)
         if month in [3, 4] and building_class == 'Residential':
             if 4 <= hour <= 17:  # Jeûne pendant la journée
                 consumption *= 0.6
@@ -468,11 +545,11 @@ class ElectricityDataGenerator:
         date_range = pd.date_range(start=start_date, end=end_date, freq=freq)
         timeseries_data = []
         
-        print(f"Génération de {len(date_range)} points temporels pour {len(buildings_df)} bâtiments en Malaisie...")
+        print(f"⚡ Génération de {len(date_range)} points temporels pour {len(buildings_df)} bâtiments en Malaisie...")
         
         for idx, (_, building) in enumerate(buildings_df.iterrows()):
             if idx % 10 == 0:
-                print(f"Traitement bâtiment {idx+1}/{len(buildings_df)} - {building['location']}")
+                print(f"Traitement bâtiment {idx+1}/{len(buildings_df)} - {building['location']} ({building['building_class']})")
                 
             building_class = building['building_class']
             unique_id = building['unique_id']
@@ -502,17 +579,14 @@ class ElectricityDataGenerator:
         
         return pd.DataFrame(timeseries_data)
     
-    def get_unique_values(self):
-        """Retourne les valeurs uniques pour les listes déroulantes"""
-        cities = list(self.malaysia_locations.keys())
-        states = list(set([info['state'] for info in self.malaysia_locations.values()]))
-        regions = list(set([info['region'] for info in self.malaysia_locations.values()]))
-        
-        return {
-            'cities': sorted(cities),
-            'states': sorted(states),
-            'regions': sorted(regions)
-        }
+    def get_building_analysis(self, city_name=None):
+        """Retourne une analyse des types de bâtiments pour une ville donnée"""
+        if city_name and city_name in self.malaysia_locations:
+            location_info = self.malaysia_locations[city_name]
+            return self.building_distributor.get_building_summary(city_name, location_info['population'])
+        else:
+            return None
+
 
 # Instance globale
 generator = ElectricityDataGenerator()
@@ -544,13 +618,26 @@ def generate():
             }
             custom_location = {custom_location_data['name']: custom_loc_info}
         
-        # Générer les données avec filtrage
+        print(f"🏗️ Génération en cours - {num_buildings} bâtiments, {start_date} à {end_date}")
+        
+        # Générer les données avec filtrage et distribution réaliste
         buildings_df = generator.generate_building_metadata(
             num_buildings, location_filter, custom_location
         )
         timeseries_df = generator.generate_timeseries_data(buildings_df, start_date, end_date, freq)
         
-        # Calculer les statistiques
+        # NOUVELLE FONCTIONNALITÉ: Validation automatique intégrée
+        validation_results = None
+        if VALIDATION_ENABLED and generator.validator:
+            print("🔍 Validation automatique en cours...")
+            validation_results = generator.validator.validate_generation(
+                buildings_df, 
+                timeseries_df, 
+                auto_adjust=False  # Pas d'ajustement automatique pour l'instant
+            )
+            print(f"✅ Validation terminée - Score: {validation_results['overall_quality']['score']}%")
+        
+        # Calculer les statistiques détaillées
         stats = {
             'total_records': len(timeseries_df),
             'buildings_count': num_buildings,
@@ -561,29 +648,61 @@ def generate():
             'zero_values': int((timeseries_df['y'] == 0).sum())
         }
         
-        # Créer un résumé des localisations (format sérialisable)
-        location_counts = buildings_df.groupby(['location', 'state', 'region']).size().reset_index(name='count')
-        location_summary = []
-        for _, row in location_counts.iterrows():
-            location_summary.append({
-                'location': row['location'],
-                'state': row['state'],
-                'region': row['region'],
-                'count': int(row['count'])
-            })
+        # Analyser la distribution des types de bâtiments
+        building_type_stats = buildings_df['building_class'].value_counts().to_dict()
         
-        return jsonify({
+        # Créer un résumé des localisations avec distribution des bâtiments
+        location_analysis = []
+        for location in buildings_df['location'].unique():
+            location_buildings = buildings_df[buildings_df['location'] == location]
+            location_info = {
+                'location': location,
+                'state': location_buildings.iloc[0]['state'],
+                'region': location_buildings.iloc[0]['region'],
+                'population': int(location_buildings.iloc[0]['population']),
+                'building_count': len(location_buildings),
+                'building_types': location_buildings['building_class'].value_counts().to_dict()
+            }
+            location_analysis.append(location_info)
+        
+        # Trier par nombre de bâtiments
+        location_analysis.sort(key=lambda x: x['building_count'], reverse=True)
+        
+        # Préparer la réponse
+        response_data = {
             'success': True,
             'buildings': buildings_df.to_dict('records'),
             'timeseries': timeseries_df.head(500).to_dict('records'),
             'stats': stats,
-            'location_summary': location_summary
-        })
+            'building_type_distribution': building_type_stats,
+            'location_analysis': location_analysis
+        }
+        
+        # Ajouter les résultats de validation si disponibles
+        if validation_results:
+            response_data['validation'] = {
+                'enabled': True,
+                'quality_score': validation_results['overall_quality']['score'],
+                'grade': validation_results['overall_quality']['grade'],
+                'cities_validated': validation_results['overall_quality']['cities_validated'],
+                'recommendations': validation_results['recommendations'][:3],  # Top 3 recommandations
+                'report_summary': validation_results['report'][:500] + "..." if len(validation_results['report']) > 500 else validation_results['report'],
+                'timestamp': validation_results['timestamp']
+            }
+        else:
+            response_data['validation'] = {
+                'enabled': False,
+                'message': 'Validation non disponible - Fonctionnement en mode standard'
+            }
+        
+        print(f"🎉 Génération réussie - {len(buildings_df)} bâtiments, {len(timeseries_df)} observations")
+        
+        return jsonify(response_data)
         
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        print(f"Erreur de génération: {error_details}")
+        print(f"❌ Erreur de génération: {error_details}")
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/download', methods=['POST'])
@@ -609,11 +728,26 @@ def download():
             }
             custom_location = {custom_location_data['name']: custom_loc_info}
         
-        # Générer les données avec filtrage
+        print(f"📦 Téléchargement en cours - {num_buildings} bâtiments")
+        
+        # Générer les données avec distribution réaliste
         buildings_df = generator.generate_building_metadata(
             num_buildings, location_filter, custom_location
         )
         timeseries_df = generator.generate_timeseries_data(buildings_df, start_date, end_date, freq)
+        
+        # Validation pour le téléchargement (plus complète)
+        validation_results = None
+        if VALIDATION_ENABLED and generator.validator:
+            print("🔍 Validation complète avant téléchargement...")
+            validation_results = generator.validator.validate_generation(
+                buildings_df, 
+                timeseries_df, 
+                auto_adjust=True  # Ajustements automatiques pour téléchargement
+            )
+            
+            # Exporter les métriques de validation
+            generator.validator.export_validation_metrics()
         
         # Créer le dossier de sortie s'il n'existe pas
         output_dir = 'generated_data'
@@ -627,6 +761,7 @@ def download():
             location_name = list(custom_location.keys())[0].replace(' ', '_').replace('/', '_')
             buildings_filename = f'{output_dir}/malaysia_buildings_{location_name}_{timestamp}.parquet'
             timeseries_filename = f'{output_dir}/malaysia_demand_{location_name}_{timestamp}.parquet'
+            validation_filename = f'{output_dir}/validation_report_{location_name}_{timestamp}.txt'
         elif location_filter and any(v != 'all' for v in [location_filter.get('city', 'all'), location_filter.get('state', 'all'), location_filter.get('region', 'all')]):
             filter_name = "filtered"
             if location_filter.get('city') and location_filter['city'] != 'all':
@@ -638,28 +773,79 @@ def download():
             
             buildings_filename = f'{output_dir}/malaysia_buildings_{filter_name}_{timestamp}.parquet'
             timeseries_filename = f'{output_dir}/malaysia_demand_{filter_name}_{timestamp}.parquet'
+            validation_filename = f'{output_dir}/validation_report_{filter_name}_{timestamp}.txt'
         else:
             buildings_filename = f'{output_dir}/malaysia_buildings_{timestamp}.parquet'
             timeseries_filename = f'{output_dir}/malaysia_demand_{timestamp}.parquet'
+            validation_filename = f'{output_dir}/validation_report_{timestamp}.txt'
         
         # Sauvegarder les fichiers
         buildings_df.to_parquet(buildings_filename, index=False)
         timeseries_df.to_parquet(timeseries_filename, index=False)
         
-        # Créer le résumé des localisations
-        location_summary = buildings_df.groupby(['location', 'state', 'region']).size().reset_index(name='count')
-        location_text = "\n".join([
-            f"   • {row['location']} ({row['state']}) - {row['count']} bâtiments"
-            for _, row in location_summary.iterrows()
-        ])
+        # Sauvegarder le rapport de validation
+        if validation_results:
+            with open(validation_filename, 'w', encoding='utf-8') as f:
+                f.write(validation_results['report'])
         
-        message = f"""📁 Fichiers générés pour la MALAISIE:
+        # Analyser la distribution des bâtiments par ville
+        building_analysis = []
+        for location in buildings_df['location'].unique():
+            location_buildings = buildings_df[buildings_df['location'] == location]
+            location_data = {
+                'location': location,
+                'state': location_buildings.iloc[0]['state'],
+                'region': location_buildings.iloc[0]['region'],
+                'population': int(location_buildings.iloc[0]['population']),
+                'building_count': len(location_buildings),
+                'building_types': location_buildings['building_class'].value_counts().to_dict()
+            }
+            building_analysis.append(location_data)
+        
+        # Créer le texte de résumé détaillé
+        building_analysis.sort(key=lambda x: x['building_count'], reverse=True)
+        location_details = []
+        
+        for location_data in building_analysis:
+            types_text = []
+            for building_type, count in sorted(location_data['building_types'].items(), key=lambda x: x[1], reverse=True):
+                if count > 0:
+                    types_text.append(f"{building_type}({count})")
+            
+            location_details.append(
+                f"   • {location_data['location']} ({location_data['state']}) - "
+                f"{location_data['population']:,} hab. - {location_data['building_count']} bâtiments: "
+                f"{', '.join(types_text[:3])}{'...' if len(types_text) > 3 else ''}"
+            )
+        
+        # Analyser la distribution globale des types de bâtiments
+        global_distribution = buildings_df['building_class'].value_counts()
+        distribution_text = []
+        for building_type, count in global_distribution.items():
+            percentage = (count / len(buildings_df)) * 100
+            distribution_text.append(f"   - {building_type}: {count} bâtiments ({percentage:.1f}%)")
+        
+        # Message avec validation
+        validation_summary = ""
+        if validation_results:
+            validation_summary = f"""
+🔍 VALIDATION AUTOMATIQUE:
+   - Score de qualité: {validation_results['overall_quality']['score']}% ({validation_results['overall_quality']['grade']})
+   - Villes validées: {validation_results['overall_quality']['cities_validated']}
+   - Rapport complet: {validation_filename}
+   - Recommandations: {len(validation_results['recommendations'])} suggestions d'amélioration
+            """
+        
+        message = f"""📁 Fichiers générés pour la MALAISIE avec DISTRIBUTION RÉALISTE:
         
 🏢 Métadonnées: {buildings_filename}
    - {len(buildings_df)} bâtiments répartis dans {buildings_df['location'].nunique()} villes
    
-🗺️ Répartition géographique:
-{location_text}
+🗺️ Répartition géographique détaillée:
+{chr(10).join(location_details)}
+        
+📊 Distribution des types de bâtiments (RÉALISTE):
+{chr(10).join(distribution_text)}
         
 ⚡ Séries temporelles: {timeseries_filename}
    - {len(timeseries_df):,} observations
@@ -667,44 +853,61 @@ def download():
    - Fréquence: {freq}
    - Patterns climatiques tropicaux intégrés
         
-📊 Statistiques:
+📈 Statistiques de consommation:
    - Consommation moyenne: {timeseries_df['y'].mean():.2f} kWh
    - Consommation maximale: {timeseries_df['y'].max():.2f} kWh
    - Valeurs nulles: {(timeseries_df['y'] == 0).sum()} ({(timeseries_df['y'] == 0).sum() / len(timeseries_df) * 100:.1f}%)
+
+{validation_summary}
    
-🌴 Spécificités Malaisie incluses:
-   - Climat tropical avec pics de climatisation
-   - Patterns culturels (Vendredi, Ramadan)
-   - Distribution basée sur population réelle"""
+🌴 Réalisme des données:
+   - Distribution basée sur la taille et le type de chaque ville
+   - Hôpitaux uniquement dans les villes >80K habitants
+   - Cliniques selon la densité de population
+   - Industries adaptées au profil économique
+   - Écoles proportionnelles à la population
+   - Tourisme selon les destinations réelles
+   - NOUVEAU: Validation automatique intégrée"""
         
-        return jsonify({
+        files_generated = {
+            'buildings': buildings_filename,
+            'timeseries': timeseries_filename
+        }
+        
+        if validation_results:
+            files_generated['validation_report'] = validation_filename
+        
+        response_data = {
             'success': True,
             'message': message,
-            'files': {
-                'buildings': buildings_filename,
-                'timeseries': timeseries_filename
-            },
-            'location_summary': [
-                {
-                    'location': row['location'],
-                    'state': row['state'], 
-                    'region': row['region'],
-                    'count': int(row['count'])
-                }
-                for _, row in location_summary.iterrows()
-            ]
-        })
+            'files': files_generated,
+            'building_analysis': building_analysis
+        }
+        
+        # Ajouter résumé de validation
+        if validation_results:
+            response_data['validation_summary'] = {
+                'score': validation_results['overall_quality']['score'],
+                'grade': validation_results['overall_quality']['grade'],
+                'recommendations_count': len(validation_results['recommendations']),
+                'adjustments_applied': len(validation_results.get('adjustments_applied', []))
+            }
+        
+        print(f"✅ Téléchargement préparé avec succès!")
+        
+        return jsonify(response_data)
         
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        print(f"Erreur de téléchargement: {error_details}")
+        print(f"❌ Erreur de téléchargement: {error_details}")
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/sample')
 def sample():
     try:
-        # Générer un petit échantillon pour démonstration
+        # Générer un petit échantillon pour démonstration avec distribution réaliste
+        print("🔬 Génération d'un échantillon...")
         buildings_df = generator.generate_building_metadata(5)
         timeseries_df = generator.generate_timeseries_data(buildings_df, '2024-01-01', '2024-01-02', '30T')
         
@@ -717,13 +920,18 @@ def sample():
             'zero_values': int((timeseries_df['y'] == 0).sum())
         }
         
+        # Analyser les types de bâtiments de l'échantillon
+        building_type_stats = buildings_df['building_class'].value_counts().to_dict()
+        
         return jsonify({
             'success': True,
             'buildings': buildings_df.to_dict('records'),
             'timeseries': timeseries_df.to_dict('records'),
             'stats': stats,
-            'building_classes': generator.building_classes,
-            'malaysia_locations': list(generator.malaysia_locations.keys())
+            'building_types': generator.building_classes,
+            'building_type_distribution': building_type_stats,
+            'malaysia_locations': list(generator.malaysia_locations.keys()),
+            'validation_enabled': VALIDATION_ENABLED
         })
         
     except Exception as e:
@@ -750,24 +958,121 @@ def api_stats():
             } for class_name, pattern in generator.consumption_patterns.items()
         },
         'supported_frequencies': ['30T', '1H', '15T', '5T'],
+        'validation_enabled': VALIDATION_ENABLED,
+        'realistic_distribution_features': [
+            'Distribution basée sur la taille réelle des villes',
+            'Hôpitaux seulement dans les villes >80K habitants',  
+            'Cliniques selon la densité de population',
+            'Industries adaptées au profil économique des villes',
+            'Tourisme selon les destinations réelles (Langkawi, George Town)',
+            'Centres commerciaux selon l\'importance économique',
+            'Écoles proportionnelles à la population',
+            'Usines uniquement dans les centres industriels',
+            'Immeubles d\'appartements en zones urbaines',
+            'NOUVEAU: Validation automatique intégrée' if VALIDATION_ENABLED else 'Validation non disponible'
+        ],
         'malaysia_specific_features': [
             'Climat tropical avec pics de climatisation',
             'Patterns culturels (Vendredi après-midi, Ramadan)',
             'Saison des pluies vs saison sèche',
-            'Distribution basée sur la population réelle des villes',
+            'Distribution RÉALISTE basée sur la population des villes',
             'Coordonnées GPS précises de Malaisie',
             'Tarification électrique par tranche horaire',
             'Événements climatiques (orages tropicaux)',
-            f'{len(generator.malaysia_locations)} villes de toutes tailles'
+            f'{len(generator.malaysia_locations)} villes avec caractéristiques spécifiques'
         ]
     })
 
+@app.route('/api/city-analysis/<city_name>')
+def api_city_analysis(city_name):
+    """API pour obtenir l'analyse détaillée d'une ville"""
+    try:
+        analysis = generator.get_building_analysis(city_name)
+        if analysis:
+            return jsonify({
+                'success': True,
+                'city_name': city_name,
+                'analysis': analysis
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f"Ville '{city_name}' non trouvée"
+            })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+# NOUVELLES APIs pour la validation
+@app.route('/api/validation-history')
+def get_validation_history():
+    """API pour consulter l'historique de validation"""
+    if not VALIDATION_ENABLED or not generator.validator:
+        return jsonify({
+            'success': False,
+            'error': 'Validation non disponible'
+        })
+    
+    try:
+        trend = generator.validator.get_quality_trend(days=30)
+        return jsonify({
+            'success': True,
+            'validation_enabled': True,
+            'trend': trend,
+            'recent_validations': generator.validator.validation_history[-10:],
+            'total_validations': len(generator.validator.validation_history)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/validation-metrics')
+def get_validation_metrics():
+    """API pour obtenir les métriques de validation"""
+    if not VALIDATION_ENABLED or not generator.validator:
+        return jsonify({
+            'success': False,
+            'error': 'Validation non disponible'
+        })
+    
+    try:
+        # Exporter et retourner les métriques
+        metrics_df = generator.validator.export_validation_metrics()
+        return jsonify({
+            'success': True,
+            'metrics_file': 'validation_metrics.csv',
+            'summary': {
+                'total_validations': len(metrics_df),
+                'average_score': metrics_df['overall_score'].mean() if not metrics_df.empty else 0,
+                'best_score': metrics_df['overall_score'].max() if not metrics_df.empty else 0,
+                'cities_analyzed': metrics_df['city_name'].nunique() if not metrics_df.empty else 0
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 if __name__ == '__main__':
-    print("🇲🇾 Démarrage du générateur de données électriques pour la MALAISIE...")
-    print(f"🏙️ {len(generator.malaysia_locations)} villes de Malaisie disponibles")
+    print("🇲🇾 Démarrage du générateur de données électriques AVEC VALIDATION pour la MALAISIE...")
+    print(f"🏙️ {len(generator.malaysia_locations)} villes de Malaisie avec distribution RÉALISTE")
+    print("🏢 Distribution intelligente des bâtiments selon:")
+    print("   - Taille de la ville (population)")
+    print("   - Type économique (industriel, touristique, etc.)")
+    print("   - Caractéristiques spéciales (port, université, etc.)")
     print("🌆 Principales villes:", ", ".join(list(generator.malaysia_locations.keys())[:8]) + "...")
     print("📊 Types de bâtiments supportés:", ", ".join(generator.building_classes))
     print("🌴 Caractéristiques spéciales: Climat tropical, Ramadan, Saisons des pluies")
+    print("🎯 Distribution réaliste: Hôpitaux, cliniques, industries selon profils urbains")
+    
+    if VALIDATION_ENABLED:
+        print("✅ VALIDATION AUTOMATIQUE ACTIVÉE:")
+        print("   - Validation en temps réel de chaque génération")
+        print("   - Scores de qualité basés sur données officielles Malaysia")
+        print("   - Recommandations d'amélioration automatiques")
+        print("   - Historique et tendances de qualité")
+        print("   - APIs dédiées: /api/validation-history, /api/validation-metrics")
+    else:
+        print("⚠️ Validation non disponible - fonctionnement en mode standard")
+        print("   Pour activer: installer quick_validation.py et building_evaluation.py")
+    
     print("⚡ Serveur démarré sur http://localhost:5000")
+    print("🔍 Interface avec validation intégrée prête!")
     
     app.run(debug=True, host='0.0.0.0', port=5000)
