@@ -1,718 +1,1018 @@
 # complete_integration.py
 """
-Intégration complète du système de prédiction des bâtiments.
-Combine frontend JavaScript et backend Python pour une expérience utilisateur fluide.
+Intégration complète du prédicteur de bâtiments avec l'application Flask.
+Ajoute les routes API nécessaires pour le prédicteur frontend.
+
+Version: 2.0 - Intégration corrigée
+Auteur: Système de génération Malaysia
 """
 
-from flask import Flask, jsonify, request, render_template_string
-import logging
 import json
+import logging
+from typing import Dict, List, Optional, Any
+from flask import jsonify, request
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Template HTML complet avec le prédicteur intégré
-ENHANCED_INDEX_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🇲🇾⚡ Générateur de Données Électriques - Malaisie avec Prédicteur</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        /* Styles spécifiques au prédicteur */
-        .predictor-container {
-            background: linear-gradient(135deg, #e8f5e8 0%, #f0fff0 100%);
-            border: 2px solid #4caf50;
-            border-radius: 15px;
-            padding: 25px;
-            margin: 25px 0;
-            box-shadow: 0 8px 25px rgba(76, 175, 80, 0.2);
-        }
-        
-        .predictor-header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        
-        .predictor-header h3 {
-            color: #2e7d32;
-            font-size: 1.4em;
-            margin-bottom: 10px;
-        }
-        
-        .predictor-status {
-            display: inline-block;
-            padding: 8px 16px;
-            background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
-            color: white;
-            border-radius: 20px;
-            font-weight: bold;
-            font-size: 0.9em;
-        }
-        
-        .predictor-status.estimated {
-            background: linear-gradient(135deg, #ff9800 0%, #ffc107 100%);
-        }
-        
-        .predictor-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        
-        .predictor-info {
-            background: white;
-            padding: 15px;
-            border-radius: 10px;
-            border: 1px solid #c8e6c9;
-        }
-        
-        .predictor-distribution {
-            grid-column: 1 / -1;
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid #c8e6c9;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        
-        .building-prediction-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 15px;
-            margin: 5px 0;
-            background: #f9f9f9;
-            border-radius: 8px;
-            border-left: 4px solid #4caf50;
-            transition: all 0.3s ease;
-        }
-        
-        .building-prediction-item:hover {
-            background: #f0f0f0;
-            transform: translateX(3px);
-        }
-        
-        .building-prediction-item.major {
-            border-left-color: #2e7d32;
-            font-weight: bold;
-            background: #e8f5e8;
-        }
-        
-        .prediction-count {
-            background: #4caf50;
-            color: white;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-weight: bold;
-            min-width: 40px;
-            text-align: center;
-        }
-        
-        .prediction-percentage {
-            color: #666;
-            font-size: 0.9em;
-            margin-left: 10px;
-        }
-        
-        .confidence-indicator {
-            text-align: center;
-            margin-top: 15px;
-        }
-        
-        .confidence-bar {
-            width: 100%;
-            height: 10px;
-            background: #eeeeee;
-            border-radius: 5px;
-            overflow: hidden;
-            margin: 10px 0;
-        }
-        
-        .confidence-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #4caf50 0%, #2e7d32 100%);
-            transition: width 0.5s ease;
-        }
-        
-        .prediction-loading {
-            text-align: center;
-            padding: 40px;
-            color: #666;
-        }
-        
-        .prediction-error {
-            text-align: center;
-            padding: 20px;
-            color: #f44336;
-            background: #ffebee;
-            border-radius: 8px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        @media (max-width: 768px) {
-            .predictor-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🇲🇾⚡ Générateur de Données Électriques</h1>
-            <p style="font-size: 1.2em; opacity: 0.9;">Malaisie - Données ultra-réalistes avec prédicteur intelligent</p>
-        </div>
 
-        <!-- Prédicteur de bâtiments intégré -->
-        <div class="predictor-container" id="predictorContainer">
-            <div class="predictor-header">
-                <h3>🔮 Prédicteur de Distribution des Bâtiments</h3>
-                <span class="predictor-status" id="predictorStatus">🎯 VRAIES DONNÉES MALAYSIA</span>
-            </div>
+class BuildingPredictorBackend:
+    """
+    Backend pour le prédicteur de bâtiments avec API pour le frontend
+    """
+    
+    def __init__(self, generator):
+        """
+        Initialise le backend du prédicteur
+        
+        Args:
+            generator: Instance du générateur principal (ElectricityDataGenerator)
+        """
+        self.generator = generator
+        
+        # Données de référence pour prédiction (synchronisées avec frontend)
+        self.reference_data = {
+            'Kuala Lumpur': {
+                'population': 1800000,
+                'region': 'Central',
+                'type': 'metropolis',
+                'distribution': {
+                    'Residential': 0.65, 'Commercial': 0.12, 'Office': 0.08,
+                    'Industrial': 0.04, 'Hospital': 0.002, 'Clinic': 0.01,
+                    'School': 0.025, 'Hotel': 0.025, 'Restaurant': 0.04,
+                    'Retail': 0.06, 'Warehouse': 0.012, 'Apartment': 0.015
+                },
+                'confidence': 95,
+                'source': 'Ministry of Health, Education, Tourism Malaysia'
+            },
+            'George Town': {
+                'population': 708000,
+                'region': 'Northern',
+                'type': 'major_city',
+                'distribution': {
+                    'Residential': 0.70, 'Commercial': 0.14, 'Office': 0.05,
+                    'Industrial': 0.04, 'Hospital': 0.001, 'Clinic': 0.006,
+                    'School': 0.022, 'Hotel': 0.025, 'Restaurant': 0.028,
+                    'Retail': 0.05, 'Warehouse': 0.008, 'Apartment': 0.012
+                },
+                'confidence': 95,
+                'source': 'Penang State Government + Tourism Board'
+            },
+            'Johor Bahru': {
+                'population': 497000,
+                'region': 'Southern',
+                'type': 'industrial_city',
+                'distribution': {
+                    'Residential': 0.68, 'Commercial': 0.12, 'Office': 0.06,
+                    'Industrial': 0.12, 'Hospital': 0.001, 'Clinic': 0.005,
+                    'School': 0.018, 'Hotel': 0.012, 'Restaurant': 0.022,
+                    'Retail': 0.04, 'Warehouse': 0.035, 'Factory': 0.025
+                },
+                'confidence': 90,
+                'source': 'Johor State Government + MIDA'
+            },
+            'Langkawi': {
+                'population': 65000,
+                'region': 'Northern',
+                'type': 'tourist_destination',
+                'distribution': {
+                    'Residential': 0.60, 'Commercial': 0.15, 'Office': 0.02,
+                    'Industrial': 0.01, 'Hospital': 0.0, 'Clinic': 0.005,
+                    'School': 0.020, 'Hotel': 0.12, 'Restaurant': 0.15,
+                    'Retail': 0.06, 'Warehouse': 0.005
+                },
+                'confidence': 85,
+                'source': 'Tourism Malaysia + Kedah State'
+            }
+        }
+        
+        # Ratios par défaut selon type de ville
+        self.default_ratios = {
+            'metropolis': {
+                'Residential': 0.65, 'Commercial': 0.12, 'Office': 0.08,
+                'Industrial': 0.04, 'Hospital': 0.002, 'Clinic': 0.01,
+                'School': 0.025, 'Hotel': 0.020, 'Restaurant': 0.035,
+                'Retail': 0.055, 'Warehouse': 0.012, 'Apartment': 0.018
+            },
+            'major_city': {
+                'Residential': 0.70, 'Commercial': 0.13, 'Office': 0.06,
+                'Industrial': 0.05, 'Hospital': 0.001, 'Clinic': 0.008,
+                'School': 0.025, 'Hotel': 0.015, 'Restaurant': 0.025,
+                'Retail': 0.045, 'Warehouse': 0.010, 'Apartment': 0.012
+            },
+            'medium_city': {
+                'Residential': 0.72, 'Commercial': 0.11, 'Office': 0.04,
+                'Industrial': 0.06, 'Hospital': 0.001, 'Clinic': 0.006,
+                'School': 0.028, 'Hotel': 0.010, 'Restaurant': 0.018,
+                'Retail': 0.040, 'Warehouse': 0.008, 'Factory': 0.015
+            },
+            'small_city': {
+                'Residential': 0.75, 'Commercial': 0.10, 'Office': 0.02,
+                'Industrial': 0.08, 'Hospital': 0.0, 'Clinic': 0.005,
+                'School': 0.030, 'Hotel': 0.005, 'Restaurant': 0.012,
+                'Retail': 0.035, 'Warehouse': 0.005
+            },
+            'tourist_destination': {
+                'Residential': 0.60, 'Commercial': 0.15, 'Office': 0.02,
+                'Industrial': 0.02, 'Hospital': 0.0, 'Clinic': 0.005,
+                'School': 0.025, 'Hotel': 0.10, 'Restaurant': 0.12,
+                'Retail': 0.06, 'Warehouse': 0.005
+            },
+            'industrial_city': {
+                'Residential': 0.65, 'Commercial': 0.10, 'Office': 0.05,
+                'Industrial': 0.15, 'Hospital': 0.001, 'Clinic': 0.005,
+                'School': 0.020, 'Hotel': 0.008, 'Restaurant': 0.018,
+                'Retail': 0.035, 'Warehouse': 0.040, 'Factory': 0.035
+            }
+        }
+        
+        logger.info("✅ BuildingPredictorBackend initialisé avec données de référence")
+    
+    def determine_city_type(self, population: int) -> str:
+        """
+        Détermine le type de ville selon la population
+        
+        Args:
+            population: Population de la ville
             
-            <div class="predictor-grid">
-                <div class="predictor-info">
-                    <h4>📍 Localisation</h4>
-                    <div id="predictorLocation">Toute la Malaisie</div>
-                    <small id="predictorPopulation">Population mixte</small>
-                </div>
-                
-                <div class="predictor-info">
-                    <h4>🏗️ Prédiction</h4>
-                    <div id="predictorBuildings">0 bâtiments</div>
-                    <small id="predictorMethod">Sélectionnez les paramètres</small>
-                </div>
-                
-                <div class="predictor-distribution">
-                    <h4>📊 Distribution Prédite</h4>
-                    <div id="predictorDistributionContent">
-                        <div class="prediction-loading">
-                            🏗️ Spécifiez le nombre de bâtiments pour voir la prédiction
-                        </div>
-                    </div>
-                </div>
-            </div>
+        Returns:
+            Type de ville (metropolis, major_city, etc.)
+        """
+        if population > 1000000:
+            return 'metropolis'
+        elif population > 500000:
+            return 'major_city'
+        elif population > 200000:
+            return 'medium_city'
+        elif population > 50000:
+            return 'small_city'
+        else:
+            return 'small_city'
+    
+    def get_city_distribution(self, city_name: str, population: int, 
+                            region: str, city_type: str = None) -> Dict[str, float]:
+        """
+        Obtient la distribution pour une ville donnée
+        
+        Args:
+            city_name: Nom de la ville
+            population: Population de la ville
+            region: Région de la ville
+            city_type: Type de ville (optionnel)
             
-            <div class="confidence-indicator">
-                <div class="confidence-bar">
-                    <div class="confidence-fill" id="predictorConfidence" style="width: 0%"></div>
-                </div>
-                <small>Confiance: <span id="predictorConfidenceText">0%</span> - Basé sur données officielles Malaysia</small>
-            </div>
-        </div>
+        Returns:
+            Distribution en pourcentages
+        """
+        # Utiliser les vraies données si disponibles
+        if city_name in self.reference_data:
+            return self.reference_data[city_name]['distribution']
+        
+        # Déterminer le type si non fourni
+        if not city_type:
+            city_type = self.determine_city_type(population)
+        
+        # Ajustements spéciaux selon le nom/région
+        if 'langkawi' in city_name.lower() or 'tourist' in city_name.lower():
+            city_type = 'tourist_destination'
+        elif any(keyword in city_name.lower() for keyword in ['port', 'pasir gudang', 'industrial']):
+            city_type = 'industrial_city'
+        
+        # Retourner la distribution par défaut
+        return self.default_ratios.get(city_type, self.default_ratios['medium_city'])
+    
+    def calculate_prediction(self, num_buildings: int, location_params: Dict) -> Dict[str, Any]:
+        """
+        Calcule la prédiction de distribution des bâtiments
+        
+        Args:
+            num_buildings: Nombre total de bâtiments
+            location_params: Paramètres de localisation
+            
+        Returns:
+            Prédiction complète avec distribution et métadonnées
+        """
+        try:
+            cities = location_params.get('cities', [])
+            confidence = location_params.get('confidence', 80)
+            method = location_params.get('method', 'Estimation')
+            
+            if not cities:
+                return self._create_error_prediction("Aucune ville spécifiée")
+            
+            # Distribution pondérée selon les villes
+            combined_distribution = {}
+            total_weight = 0
+            total_population = 0
+            regions = set()
+            
+            # Calculer les poids et combiner les distributions
+            for city in cities:
+                weight = city.get('population', 100000)
+                total_weight += weight
+                total_population += city.get('population', 100000)
+                regions.add(city.get('region', 'Unknown'))
+                
+                # Obtenir la distribution pour cette ville
+                city_distribution = self.get_city_distribution(
+                    city.get('name', ''),
+                    city.get('population', 100000),
+                    city.get('region', ''),
+                    city.get('type', '')
+                )
+                
+                # Ajouter avec pondération
+                for building_type, percentage in city_distribution.items():
+                    if building_type not in combined_distribution:
+                        combined_distribution[building_type] = 0
+                    combined_distribution[building_type] += percentage * weight
+            
+            # Normaliser la distribution
+            for building_type in combined_distribution:
+                combined_distribution[building_type] /= total_weight
+            
+            # Convertir en nombres de bâtiments
+            building_counts = self._distribute_buildings(combined_distribution, num_buildings)
+            
+            # Créer la réponse
+            prediction = {
+                'success': True,
+                'distribution': building_counts,
+                'percentages': combined_distribution,
+                'confidence': confidence,
+                'method': method,
+                'summary': {
+                    'total_buildings': num_buildings,
+                    'cities_count': len(cities),
+                    'average_population': int(total_population / len(cities)) if cities else 0,
+                    'total_population': int(total_population),
+                    'regions': list(regions),
+                    'has_real_data': any(city.get('name') in self.reference_data for city in cities)
+                },
+                'city_details': [
+                    {
+                        'name': city.get('name', ''),
+                        'population': city.get('population', 0),
+                        'region': city.get('region', ''),
+                        'type': city.get('type', ''),
+                        'has_real_data': city.get('name') in self.reference_data,
+                        'data_source': self.reference_data[city.get('name', '')].get('source', 'Estimation') 
+                                      if city.get('name') in self.reference_data else 'Ratios par défaut'
+                    }
+                    for city in cities
+                ],
+                'data_quality': {
+                    'real_data_cities': sum(1 for city in cities if city.get('name') in self.reference_data),
+                    'estimated_cities': len(cities) - sum(1 for city in cities if city.get('name') in self.reference_data),
+                    'overall_quality': 'HIGH' if confidence >= 90 else 'MEDIUM' if confidence >= 70 else 'LOW'
+                }
+            }
+            
+            logger.info(f"🔮 Prédiction calculée: {num_buildings} bâtiments, {len(cities)} villes, {confidence}% confiance")
+            
+            return prediction
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur calcul prédiction: {e}")
+            return self._create_error_prediction(str(e))
+    
+    def _distribute_buildings(self, percentages: Dict[str, float], total_buildings: int) -> Dict[str, int]:
+        """
+        Distribue les bâtiments selon les pourcentages
+        
+        Args:
+            percentages: Pourcentages par type de bâtiment
+            total_buildings: Nombre total de bâtiments
+            
+        Returns:
+            Nombres de bâtiments par type
+        """
+        building_counts = {}
+        assigned_buildings = 0
+        
+        # Trier par pourcentage décroissant
+        sorted_types = sorted(percentages.items(), key=lambda x: x[1], reverse=True)
+        
+        # Assigner les bâtiments (tous sauf le dernier)
+        for i, (building_type, percentage) in enumerate(sorted_types[:-1]):
+            count = round(percentage * total_buildings)
+            building_counts[building_type] = count
+            assigned_buildings += count
+        
+        # Le dernier type récupère le reste
+        if sorted_types:
+            last_type = sorted_types[-1][0]
+            building_counts[last_type] = max(0, total_buildings - assigned_buildings)
+        
+        return building_counts
+    
+    def _create_error_prediction(self, error_message: str) -> Dict[str, Any]:
+        """
+        Crée une prédiction d'erreur
+        
+        Args:
+            error_message: Message d'erreur
+            
+        Returns:
+            Structure de prédiction avec erreur
+        """
+        return {
+            'success': False,
+            'error': error_message,
+            'distribution': {},
+            'confidence': 0,
+            'method': 'Error',
+            'summary': {
+                'total_buildings': 0,
+                'cities_count': 0,
+                'error': True
+            }
+        }
+    
+    def get_prediction_stats(self) -> Dict[str, Any]:
+        """
+        Retourne les statistiques du système de prédiction
+        
+        Returns:
+            Statistiques complètes
+        """
+        return {
+            'reference_cities': list(self.reference_data.keys()),
+            'city_types': list(self.default_ratios.keys()),
+            'total_malaysia_locations': len(self.generator.malaysia_locations),
+            'cities_with_real_data': len(self.reference_data),
+            'building_types': list(self.generator.building_classes),
+            'prediction_capabilities': {
+                'real_data_integration': self.generator.real_data_available,
+                'validation_system': self.generator.validation_enabled,
+                'building_distributor': hasattr(self.generator, 'building_distributor')
+            },
+            'data_sources': [
+                'Ministry of Health Malaysia (MOH)',
+                'Ministry of Education Malaysia (MOE)',
+                'Tourism Malaysia',
+                'Malaysia Investment Development Authority (MIDA)',
+                'State Government Planning Departments'
+            ]
+        }
+    
+    def compare_prediction_with_generator(self, num_buildings: int, location_params: Dict) -> Dict[str, Any]:
+        """
+        Compare la prédiction avec ce que génèrerait réellement le système
+        
+        Args:
+            num_buildings: Nombre de bâtiments
+            location_params: Paramètres de localisation
+            
+        Returns:
+            Comparaison détaillée
+        """
+        try:
+            # Obtenir la prédiction
+            prediction = self.calculate_prediction(num_buildings, location_params)
+            
+            if not prediction['success']:
+                return prediction
+            
+            # Simuler une génération réelle (sans créer les données)
+            cities = location_params.get('cities', [])
+            if not cities:
+                return self._create_error_prediction("Aucune ville pour la comparaison")
+            
+            # Prendre la première ville comme référence
+            main_city = cities[0]
+            city_name = main_city.get('name', 'Unknown')
+            
+            # Utiliser le générateur pour obtenir la distribution réelle
+            if hasattr(self.generator, 'building_distributor'):
+                real_distribution = self.generator.building_distributor.calculate_building_distribution(
+                    city_name,
+                    main_city.get('population', 100000),
+                    main_city.get('region', 'Central'),
+                    num_buildings
+                )
+            else:
+                # Fallback vers distribution basique
+                real_distribution = self._get_basic_distribution(num_buildings)
+            
+            # Calculer les différences
+            comparison = {
+                'prediction': prediction['distribution'],
+                'real_generation': real_distribution,
+                'differences': {},
+                'accuracy_score': 0,
+                'total_buildings': num_buildings,
+                'comparison_city': city_name
+            }
+            
+            # Analyser les différences
+            all_types = set(list(prediction['distribution'].keys()) + list(real_distribution.keys()))
+            total_diff = 0
+            
+            for building_type in all_types:
+                predicted = prediction['distribution'].get(building_type, 0)
+                real = real_distribution.get(building_type, 0)
+                diff = abs(predicted - real)
+                
+                comparison['differences'][building_type] = {
+                    'predicted': predicted,
+                    'real': real,
+                    'difference': diff,
+                    'percentage_diff': (diff / max(real, 1)) * 100
+                }
+                
+                total_diff += diff
+            
+            # Calculer le score de précision
+            accuracy = max(0, 100 - (total_diff / num_buildings) * 100)
+            comparison['accuracy_score'] = round(accuracy, 1)
+            
+            # Ajouter des recommandations
+            comparison['recommendations'] = self._generate_comparison_recommendations(comparison)
+            
+            return {
+                'success': True,
+                'comparison': comparison,
+                'summary': {
+                    'accuracy': accuracy,
+                    'total_difference': total_diff,
+                    'perfect_matches': len([d for d in comparison['differences'].values() if d['difference'] == 0]),
+                    'major_differences': len([d for d in comparison['differences'].values() if d['percentage_diff'] > 50])
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur comparaison prédiction: {e}")
+            return self._create_error_prediction(f"Erreur comparaison: {str(e)}")
+    
+    def _get_basic_distribution(self, num_buildings: int) -> Dict[str, int]:
+        """
+        Distribution basique de fallback
+        
+        Args:
+            num_buildings: Nombre de bâtiments
+            
+        Returns:
+            Distribution basique
+        """
+        basic_ratios = {
+            'Residential': 0.70,
+            'Commercial': 0.12,
+            'Industrial': 0.08,
+            'Office': 0.04,
+            'Retail': 0.03,
+            'School': 0.02,
+            'Clinic': 0.01
+        }
+        
+        return self._distribute_buildings(basic_ratios, num_buildings)
+    
+    def _generate_comparison_recommendations(self, comparison: Dict) -> List[str]:
+        """
+        Génère des recommandations basées sur la comparaison
+        
+        Args:
+            comparison: Résultats de comparaison
+            
+        Returns:
+            Liste de recommandations
+        """
+        recommendations = []
+        
+        # Analyser les différences majeures
+        for building_type, diff_data in comparison['differences'].items():
+            if diff_data['percentage_diff'] > 30:  # Différence > 30%
+                if diff_data['predicted'] > diff_data['real']:
+                    recommendations.append(
+                        f"Réduire la prédiction pour {building_type}: "
+                        f"{diff_data['predicted']} → {diff_data['real']} "
+                        f"({diff_data['percentage_diff']:.1f}% de différence)"
+                    )
+                else:
+                    recommendations.append(
+                        f"Augmenter la prédiction pour {building_type}: "
+                        f"{diff_data['predicted']} → {diff_data['real']} "
+                        f"({diff_data['percentage_diff']:.1f}% de différence)"
+                    )
+        
+        # Recommandations générales selon la précision
+        accuracy = comparison.get('accuracy_score', 0)
+        if accuracy >= 90:
+            recommendations.append("✅ Prédiction très précise - Système bien calibré")
+        elif accuracy >= 75:
+            recommendations.append("✅ Prédiction correcte - Ajustements mineurs possibles")
+        elif accuracy >= 60:
+            recommendations.append("⚠️ Prédiction acceptable - Améliorations recommandées")
+        else:
+            recommendations.append("❌ Prédiction imprécise - Révision des paramètres nécessaire")
+        
+        return recommendations
 
-        <!-- Formulaire principal -->
-        <div class="card">
-            <h2>📊 Configuration de la Génération</h2>
-            
-            <!-- Section de filtrage géographique -->
-            <div class="card" style="background: #f8f9fa; margin-bottom: 25px;">
-                <h3 style="color: #495057; margin-bottom: 20px;">🗺️ Filtrage Géographique</h3>
-                
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label for="locationMode">Mode de Localisation</label>
-                        <select id="locationMode" onchange="toggleLocationMode()">
-                            <option value="all">🇲🇾 Toute la Malaisie</option>
-                            <option value="filter">🎯 Filtrer par zone</option>
-                            <option value="custom">➕ Localisation personnalisée</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <!-- Filtres par zone -->
-                <div id="filterSection" style="display: none;">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="filterRegion">🌏 Région</label>
-                            <select id="filterRegion" onchange="updateStateOptions()">
-                                <option value="all">Toutes les régions</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="filterState">🏛️ État</label>
-                            <select id="filterState" onchange="updateCityOptions()">
-                                <option value="all">Tous les états</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="filterCity">🏙️ Ville</label>
-                            <select id="filterCity">
-                                <option value="all">Toutes les villes</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="populationRange">👥 Population</label>
-                            <select id="populationRange" onchange="updatePopulationInputs()">
-                                <option value="all">Toutes tailles</option>
-                                <option value="large">Grandes villes (>500K)</option>
-                                <option value="medium">Villes moyennes (200K-500K)</option>
-                                <option value="small">Petites villes (<200K)</option>
-                                <option value="custom">Plage personnalisée</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div id="customPopulationRange" style="display: none;">
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label for="popMin">Population Min</label>
-                                <input type="number" id="popMin" placeholder="Ex: 50000">
-                            </div>
-                            <div class="form-group">
-                                <label for="popMax">Population Max</label>
-                                <input type="number" id="popMax" placeholder="Ex: 1000000">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Localisation personnalisée -->
-                <div id="customSection" style="display: none;">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="customCity">🏙️ Nom de la Ville</label>
-                            <input type="text" id="customCity" placeholder="Ex: Nouvelle Ville">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="customState">🏛️ État/Province</label>
-                            <input type="text" id="customState" placeholder="Ex: Nouvel État">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="customRegion">🌏 Région</label>
-                            <select id="customRegion">
-                                <option value="Central">Central</option>
-                                <option value="Northern">Northern</option>
-                                <option value="Southern">Southern</option>
-                                <option value="East Coast">East Coast</option>
-                                <option value="East Malaysia">East Malaysia</option>
-                                <option value="Custom">Région personnalisée</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="customPopulation">👥 Population</label>
-                            <input type="number" id="customPopulation" placeholder="Ex: 250000">
-                        </div>
-                    </div>
-                    
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="customLat">📍 Latitude</label>
-                            <input type="number" step="0.000001" id="customLat" placeholder="Ex: 3.1390">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="customLon">📍 Longitude</label>
-                            <input type="number" step="0.000001" id="customLon" placeholder="Ex: 101.6869">
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="form-grid">
-                <div class="form-group">
-                    <label for="numBuildings">🏢 Nombre de Bâtiments</label>
-                    <input type="number" id="numBuildings" value="50" min="1" max="10000" onchange="updateEstimation()" oninput="updateEstimation()">
-                    <small id="buildingGuidance" style="color: #666; font-size: 0.9em; margin-top: 5px; display: block;"></small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="freq">⏰ Fréquence d'Échantillonnage</label>
-                    <select id="freq" onchange="updateEstimation()">
-                        <option value="5T">5 minutes (très détaillé)</option>
-                        <option value="15T">15 minutes (détaillé)</option>
-                        <option value="30T" selected>30 minutes</option>
-                        <option value="1H">1 heure (standard)</option>
-                        <option value="2H">2 heures</option>
-                        <option value="6H">6 heures</option>
-                        <option value="12H">12 heures (2x/jour)</option>
-                        <option value="1D">1 jour (quotidien)</option>
-                        <option value="1W">1 semaine (hebdomadaire)</option>
-                        <option value="1M">1 mois (mensuel)</option>
-                    </select>
-                    <small id="freqInfo" style="color: #666; font-size: 0.9em;"></small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="startDate">📅 Date de Début</label>
-                    <input type="date" id="startDate" value="2024-01-01" onchange="updateEstimation()">
-                </div>
-                
-                <div class="form-group">
-                    <label for="endDate">📅 Date de Fin</label>
-                    <input type="date" id="endDate" value="2024-01-31" onchange="updateEstimation()">
-                </div>
-            </div>
-            
-            <!-- Section d'estimation -->
-            <div class="estimation-card" id="estimationCard">
-                <h3>📊 Estimation du Dataset</h3>
-                <div class="estimation-grid">
-                    <div class="estimation-item">
-                        <span class="estimation-label">📈 Observations totales:</span>
-                        <span class="estimation-value" id="totalObservations">-</span>
-                    </div>
-                    <div class="estimation-item">
-                        <span class="estimation-label">💾 Taille fichier (~):</span>
-                        <span class="estimation-value" id="fileSize">-</span>
-                    </div>
-                    <div class="estimation-item">
-                        <span class="estimation-label">⏱️ Temps génération (~):</span>
-                        <span class="estimation-value" id="generationTime">-</span>
-                    </div>
-                    <div class="estimation-item">
-                        <span class="estimation-label">🎯 Cas d'usage:</span>
-                        <span class="estimation-value" id="useCase">-</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Section de recommandations -->
-            <div class="guidance-section">
-                <h4>💡 Guide de Configuration</h4>
-                <div class="guidance-recommendations">
-                    <div class="recommendation-item">
-                        <strong>🧪 Test Rapide</strong><br>
-                        5-20 bâtiments, 1 semaine, 1H<br>
-                        <em>~3K observations, <10s</em>
-                    </div>
-                    <div class="recommendation-item">
-                        <strong>📚 Développement</strong><br>
-                        50-200 bâtiments, 1-3 mois, 30T<br>
-                        <em>~200K observations, 1-3min</em>
-                    </div>
-                    <div class="recommendation-item">
-                        <strong>🤖 Machine Learning</strong><br>
-                        200-1000 bâtiments, 6-12 mois, 1H<br>
-                        <em>~1M observations, 5-10min</em>
-                    </div>
-                    <div class="recommendation-item">
-                        <strong>🏭 Production</strong><br>
-                        1000-5000 bâtiments, 1-3 ans, 30T<br>
-                        <em>~20M observations, 20+ min</em>
-                    </div>
-                    <div class="recommendation-item">
-                        <strong>📊 Analyse Quotidienne</strong><br>
-                        100-500 bâtiments, 1 an, 1D<br>
-                        <em>~180K observations, 1min</em>
-                    </div>
-                    <div class="recommendation-item">
-                        <strong>📈 Tendances Long Terme</strong><br>
-                        1000+ bâtiments, 5+ ans, 1W/1M<br>
-                        <em>~500K observations, 3-5min</em>
-                    </div>
-                </div>
-            </div>
 
-            <div class="button-group">
-                <button class="btn" onclick="generateData()">🚀 Générer et Visualiser</button>
-                <button class="btn btn-success" onclick="downloadData()">💾 Générer et Télécharger</button>
-                <button class="btn btn-warning" onclick="showSample()">👁️ Voir un Échantillon</button>
-            </div>
-        </div>
+def create_complete_integration(app, generator):
+    """
+    Crée l'intégration complète du prédicteur avec l'application Flask
+    
+    Args:
+        app: Instance Flask
+        generator: Instance du générateur principal
+        
+    Returns:
+        True si l'intégration réussit, False sinon
+    """
+    try:
+        # Créer l'instance du backend prédicteur
+        predictor_backend = BuildingPredictorBackend(generator)
+        
+        # ===============================================================
+        # ROUTES API POUR LE PRÉDICTEUR
+        # ===============================================================
+        
+        @app.route('/api/predictor/predict', methods=['POST'])
+        def api_predict_buildings():
+            """
+            API principale de prédiction des bâtiments
+            """
+            try:
+                data = request.get_json()
+                
+                # Paramètres requis
+                num_buildings = data.get('num_buildings', 0)
+                location_params = data.get('location_params', {})
+                
+                if num_buildings <= 0:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Nombre de bâtiments invalide'
+                    })
+                
+                # Calculer la prédiction
+                prediction = predictor_backend.calculate_prediction(num_buildings, location_params)
+                
+                return jsonify(prediction)
+                
+            except Exception as e:
+                logger.error(f"❌ Erreur API prédiction: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': f'Erreur serveur: {str(e)}'
+                })
+        
+        @app.route('/api/predictor/stats')
+        def api_predictor_stats():
+            """
+            API pour obtenir les statistiques du prédicteur
+            """
+            try:
+                stats = predictor_backend.get_prediction_stats()
+                
+                return jsonify({
+                    'success': True,
+                    'stats': stats,
+                    'backend_available': True,
+                    'integration_version': '2.0'
+                })
+                
+            except Exception as e:
+                logger.error(f"❌ Erreur API stats prédicteur: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                })
+        
+        @app.route('/api/predictor/compare', methods=['POST'])
+        def api_compare_prediction():
+            """
+            API pour comparer prédiction vs génération réelle
+            """
+            try:
+                data = request.get_json()
+                
+                num_buildings = data.get('num_buildings', 0)
+                location_params = data.get('location_params', {})
+                
+                if num_buildings <= 0:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Nombre de bâtiments invalide'
+                    })
+                
+                # Effectuer la comparaison
+                comparison = predictor_backend.compare_prediction_with_generator(
+                    num_buildings, location_params
+                )
+                
+                return jsonify(comparison)
+                
+            except Exception as e:
+                logger.error(f"❌ Erreur API comparaison: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                })
+        
+        @app.route('/api/predictor/city-analysis/<city_name>')
+        def api_predictor_city_analysis(city_name):
+            """
+            API pour analyser une ville spécifique
+            """
+            try:
+                # Obtenir les infos de la ville
+                if city_name in generator.malaysia_locations:
+                    city_info = generator.malaysia_locations[city_name]
+                    
+                    # Créer une prédiction pour cette ville
+                    location_params = {
+                        'cities': [{
+                            'name': city_name,
+                            'population': city_info['population'],
+                            'region': city_info['region'],
+                            'type': predictor_backend.determine_city_type(city_info['population'])
+                        }],
+                        'confidence': 95 if city_name in predictor_backend.reference_data else 80,
+                        'method': 'Vraies données' if city_name in predictor_backend.reference_data else 'Estimation'
+                    }
+                    
+                    # Prédiction pour 100 bâtiments (référence)
+                    prediction = predictor_backend.calculate_prediction(100, location_params)
+                    
+                    # Ajouter des informations supplémentaires
+                    analysis = {
+                        'city_info': city_info,
+                        'prediction_sample': prediction,
+                        'has_real_data': city_name in predictor_backend.reference_data,
+                        'data_source': predictor_backend.reference_data[city_name].get('source', 'Estimation basée sur population') if city_name in predictor_backend.reference_data else 'Estimation basée sur population',
+                        'city_type': predictor_backend.determine_city_type(city_info['population']),
+                        'recommended_building_types': [
+                            bt for bt, count in prediction['distribution'].items() 
+                            if count > 5  # Types avec au moins 5 bâtiments sur 100
+                        ] if prediction['success'] else []
+                    }
+                    
+                    return jsonify({
+                        'success': True,
+                        'city_name': city_name,
+                        'analysis': analysis
+                    })
+                
+                else:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Ville "{city_name}" non trouvée dans la base Malaysia'
+                    })
+                    
+            except Exception as e:
+                logger.error(f"❌ Erreur analyse ville {city_name}: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                })
+        
+        @app.route('/api/predictor/custom-city', methods=['POST'])
+        def api_custom_city_prediction():
+            """
+            API pour prédiction d'une ville personnalisée
+            """
+            try:
+                data = request.get_json()
+                
+                # Paramètres de la ville personnalisée
+                city_name = data.get('city_name', 'Custom City')
+                population = data.get('population', 100000)
+                region = data.get('region', 'Custom')
+                num_buildings = data.get('num_buildings', 100)
+                
+                if num_buildings <= 0:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Nombre de bâtiments invalide'
+                    })
+                
+                # Créer les paramètres de localisation
+                city_type = predictor_backend.determine_city_type(population)
+                location_params = {
+                    'cities': [{
+                        'name': city_name,
+                        'population': population,
+                        'region': region,
+                        'type': city_type
+                    }],
+                    'confidence': 70,  # Confiance réduite pour ville personnalisée
+                    'method': 'Estimation personnalisée'
+                }
+                
+                # Calculer la prédiction
+                prediction = predictor_backend.calculate_prediction(num_buildings, location_params)
+                
+                # Ajouter des informations sur la ville personnalisée
+                if prediction['success']:
+                    prediction['custom_city_info'] = {
+                        'name': city_name,
+                        'population': population,
+                        'region': region,
+                        'type': city_type,
+                        'is_custom': True,
+                        'similar_real_cities': [
+                            name for name, info in generator.malaysia_locations.items()
+                            if abs(info['population'] - population) < population * 0.3
+                        ][:3]  # Top 3 villes similaires
+                    }
+                
+                return jsonify(prediction)
+                
+            except Exception as e:
+                logger.error(f"❌ Erreur prédiction ville personnalisée: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                })
+        
+        # ===============================================================
+        # INTÉGRATION AVEC LES ROUTES EXISTANTES
+        # ===============================================================
+        
+        # Modifier la route /generate existante pour inclure la prédiction
+        original_generate = None
+        
+        # Trouver la route /generate existante
+        for rule in app.url_map.iter_rules():
+            if rule.rule == '/generate' and 'POST' in rule.methods:
+                # Sauvegarder la fonction originale
+                original_generate = app.view_functions[rule.endpoint]
+                break
+        
+        if original_generate:
+            @app.route('/generate-with-prediction', methods=['POST'])
+            def generate_with_prediction():
+                """
+                Route améliorée qui inclut la prédiction avant génération
+                """
+                try:
+                    # Obtenir les paramètres de la requête
+                    data = request.get_json()
+                    num_buildings = data.get('num_buildings', 10)
+                    
+                    # Créer les paramètres de localisation pour prédiction
+                    location_params = {}
+                    
+                    if data.get('custom_location'):
+                        custom = data['custom_location']
+                        location_params = {
+                            'cities': [{
+                                'name': custom.get('name', 'Custom'),
+                                'population': custom.get('population', 100000),
+                                'region': custom.get('region', 'Central'),
+                                'type': predictor_backend.determine_city_type(custom.get('population', 100000))
+                            }],
+                            'confidence': 70,
+                            'method': 'Ville personnalisée'
+                        }
+                    else:
+                        # Utiliser toute la Malaisie
+                        cities = [
+                            {
+                                'name': name,
+                                'population': info['population'],
+                                'region': info['region'],
+                                'type': predictor_backend.determine_city_type(info['population'])
+                            }
+                            for name, info in generator.malaysia_locations.items()
+                        ]
+                        location_params = {
+                            'cities': cities,
+                            'confidence': 95,
+                            'method': 'Distribution Malaysia complète'
+                        }
+                    
+                    # Calculer la prédiction
+                    prediction = predictor_backend.calculate_prediction(num_buildings, location_params)
+                    
+                    # Appeler la génération originale
+                    original_response = original_generate()
+                    
+                    # Si la génération originale réussit, ajouter la prédiction
+                    if hasattr(original_response, 'json') and original_response.get_json().get('success'):
+                        response_data = original_response.get_json()
+                        response_data['prediction'] = prediction
+                        return jsonify(response_data)
+                    else:
+                        return original_response
+                    
+                except Exception as e:
+                    logger.error(f"❌ Erreur génération avec prédiction: {e}")
+                    # Fallback vers génération originale
+                    return original_generate()
+        
+        # ===============================================================
+        # ROUTE DE TEST ET DIAGNOSTIC
+        # ===============================================================
+        
+        @app.route('/api/predictor/test')
+        def api_test_predictor():
+            """
+            Route de test pour vérifier le fonctionnement du prédicteur
+            """
+            try:
+                test_results = {}
+                
+                # Test 1: Prédiction Kuala Lumpur
+                kl_params = {
+                    'cities': [{
+                        'name': 'Kuala Lumpur',
+                        'population': 1800000,
+                        'region': 'Central',
+                        'type': 'metropolis'
+                    }],
+                    'confidence': 95,
+                    'method': 'Test avec vraies données'
+                }
+                
+                kl_prediction = predictor_backend.calculate_prediction(100, kl_params)
+                test_results['kuala_lumpur_test'] = {
+                    'success': kl_prediction['success'],
+                    'distribution_types': len(kl_prediction.get('distribution', {})),
+                    'confidence': kl_prediction.get('confidence', 0)
+                }
+                
+                # Test 2: Ville personnalisée
+                custom_params = {
+                    'cities': [{
+                        'name': 'Test City',
+                        'population': 300000,
+                        'region': 'Test Region',
+                        'type': 'medium_city'
+                    }],
+                    'confidence': 70,
+                    'method': 'Test ville personnalisée'
+                }
+                
+                custom_prediction = predictor_backend.calculate_prediction(50, custom_params)
+                test_results['custom_city_test'] = {
+                    'success': custom_prediction['success'],
+                    'distribution_types': len(custom_prediction.get('distribution', {})),
+                    'confidence': custom_prediction.get('confidence', 0)
+                }
+                
+                # Test 3: Comparaison si possible
+                if hasattr(generator, 'building_distributor'):
+                    comparison = predictor_backend.compare_prediction_with_generator(100, kl_params)
+                    test_results['comparison_test'] = {
+                        'success': comparison['success'],
+                        'accuracy': comparison.get('summary', {}).get('accuracy', 0)
+                    }
+                
+                # Résumé général
+                test_results['summary'] = {
+                    'backend_functional': True,
+                    'real_data_available': len(predictor_backend.reference_data),
+                    'total_malaysia_cities': len(generator.malaysia_locations),
+                    'building_types_supported': len(generator.building_classes),
+                    'test_timestamp': logger.handlers[0].format(logger.makeRecord(
+                        'test', 20, '', 0, '', (), None
+                    )) if logger.handlers else 'Unknown'
+                }
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Tests du prédicteur terminés',
+                    'test_results': test_results
+                })
+                
+            except Exception as e:
+                logger.error(f"❌ Erreur test prédicteur: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e),
+                    'backend_available': False
+                })
+        
+        # ===============================================================
+        # FINALISATION
+        # ===============================================================
+        
+        logger.info("✅ Intégration complète du prédicteur créée avec succès")
+        logger.info(f"🔗 Routes ajoutées:")
+        logger.info("   • /api/predictor/predict - Prédiction principale")
+        logger.info("   • /api/predictor/stats - Statistiques")
+        logger.info("   • /api/predictor/compare - Comparaison")
+        logger.info("   • /api/predictor/city-analysis/<city> - Analyse ville")
+        logger.info("   • /api/predictor/custom-city - Ville personnalisée")
+        logger.info("   • /api/predictor/test - Tests et diagnostic")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur création intégration prédicteur: {e}")
+        return False
 
-        <!-- Zone de chargement -->
-        <div class="loading" id="loading">
-            <h2>🌴 Génération en cours pour la Malaisie...</h2>
-            <p>Création de données électriques tropicales réalistes, veuillez patienter.</p>
-            <div style="margin-top: 20px;">
-                <div class="spinner"></div>
-            </div>
-        </div>
 
-        <!-- Résultats -->
-        <div class="results" id="results">
-            <div id="alerts"></div>
-            <div class="stats-grid" id="statsGrid"></div>
-            <div id="dataPreview"></div>
-        </div>
-    </div>
+# ===================================================================
+# CLASSE UTILITAIRE POUR INTÉGRATION FRONTEND
+# ===================================================================
 
-    <!-- Scripts -->
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
-    <script>
-        // Script intégré pour le prédicteur
-        class IntegratedBuildingPredictor {
-            constructor() {
-                this.apiEndpoint = '/api/predict-buildings';
-                this.currentPrediction = null;
-                this.isLoading = false;
-                
-                this.initializeEventListeners();
-                console.log('🔮 Prédicteur intégré initialisé');
-            }
+class PredictorFrontendHelper:
+    """
+    Classe utilitaire pour faciliter l'intégration frontend
+    """
+    
+    @staticmethod
+    def generate_javascript_config(predictor_backend):
+        """
+        Génère la configuration JavaScript pour le frontend
+        
+        Args:
+            predictor_backend: Instance du backend prédicteur
             
-            initializeEventListeners() {
-                const watchedElements = [
-                    'numBuildings', 'locationMode', 'filterRegion', 'filterState', 
-                    'filterCity', 'populationRange', 'popMin', 'popMax',
-                    'customCity', 'customState', 'customRegion', 'customPopulation'
-                ];
+        Returns:
+            Configuration JavaScript
+        """
+        config = {
+            'apiEndpoints': {
+                'predict': '/api/predictor/predict',
+                'stats': '/api/predictor/stats',
+                'compare': '/api/predictor/compare',
+                'cityAnalysis': '/api/predictor/city-analysis',
+                'customCity': '/api/predictor/custom-city',
+                'test': '/api/predictor/test'
+            },
+            'referenceCities': list(predictor_backend.reference_data.keys()),
+            'cityTypes': list(predictor_backend.default_ratios.keys()),
+            'buildingTypes': [
+                'Residential', 'Commercial', 'Office', 'Industrial', 
+                'Hospital', 'Clinic', 'School', 'Hotel', 'Restaurant',
+                'Retail', 'Warehouse', 'Factory', 'Apartment'
+            ],
+            'malaysiaCities': list(predictor_backend.generator.malaysia_locations.keys()),
+            'defaultConfidence': {
+                'realData': 95,
+                'estimation': 80,
+                'custom': 70
+            }
+        }
+        
+        return f"window.PREDICTOR_CONFIG = {json.dumps(config, indent=2)};"
+    
+    @staticmethod
+    def create_integration_guide():
+        """
+        Crée un guide d'intégration pour le frontend
+        
+        Returns:
+            Guide d'intégration
+        """
+        return """
+🔮 GUIDE D'INTÉGRATION PRÉDICTEUR FRONTEND
+=========================================
 
-                watchedElements.forEach(elementId => {
-                    const element = document.getElementById(elementId);
-                    if (element) {
-                        element.addEventListener('change', () => this.updatePrediction());
-                        element.addEventListener('input', () => this.debouncedUpdate());
-                    }
-                });
-            }
-            
-            debouncedUpdate() {
-                clearTimeout(this.updateTimeout);
-                this.updateTimeout = setTimeout(() => this.updatePrediction(), 500);
-            }
-            
-            async updatePrediction() {
-                if (this.isLoading) return;
-                
-                try {
-                    const numBuildings = parseInt(document.getElementById('numBuildings')?.value) || 0;
-                    
-                    if (numBuildings === 0) {
-                        this.showEmptyState();
-                        return;
-                    }
-                    
-                    this.showLoading();
-                    this.isLoading = true;
-                    
-                    const requestData = this.buildRequestData(numBuildings);
-                    const response = await fetch(this.apiEndpoint, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(requestData)
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        this.currentPrediction = result;
-                        this.displayPrediction(result);
-                    } else {
-                        this.showError(result.error || 'Erreur de prédiction');
-                    }
-                    
-                } catch (error) {
-                    console.error('Erreur prédiction:', error);
-                    this.showError(error.message);
-                } finally {
-                    this.isLoading = false;
-                }
-            }
-            
-            buildRequestData(numBuildings) {
-                const locationMode = document.getElementById('locationMode')?.value || 'all';
-                
-                const requestData = {
-                    num_buildings: numBuildings,
-                    location_mode: locationMode
-                };
-                
-                if (locationMode === 'filter') {
-                    const region = document.getElementById('filterRegion')?.value;
-                    const state = document.getElementById('filterState')?.value;
-                    const city = document.getElementById('filterCity')?.value;
-                    const popMin = document.getElementById('popMin')?.value;
-                    const popMax = document.getElementById('popMax')?.value;
-                    
-                    requestData.location_filter = {
-                        region: region !== 'all' ? region : null,
-                        state: state !== 'all' ? state : null,
-                        city: city !== 'all' ? city : null,
-                        population_min: popMin ? parseInt(popMin) : null,
-                        population_max: popMax ? parseInt(popMax) : null
-                    };
-                } else if (locationMode === 'custom') {
-                    const customCity = document.getElementById('customCity')?.value?.trim();
-                    const customState = document.getElementById('customState')?.value?.trim();
-                    const customRegion = document.getElementById('customRegion')?.value;
-                    const customPop = document.getElementById('customPopulation')?.value;
-                    
-                    if (customCity && customState && customPop) {
-                        requestData.custom_location = {
-                            name: customCity,
-                            state: customState,
-                            region: customRegion || 'Central',
-                            population: parseInt(customPop) || 100000
-                        };
-                    }
-                }
-                
-                return requestData;
-            }
-            
-            displayPrediction(result) {
-                const prediction = result.prediction;
-                const quality = result.quality_metrics;
-                const locationParams = result.location_params;
-                
-                this.updatePredictionInfo(prediction, quality, locationParams);
-                this.updateDistribution(prediction);
-                this.updateConfidence(quality);
-                
-                console.log('✅ Prédiction affichée:', prediction.total_buildings, 'bâtiments');
-            }
-            
-            updatePredictionInfo(prediction, quality, locationParams) {
-                const locationElement = document.getElementById('predictorLocation');
-                const populationElement = document.getElementById('predictorPopulation');
-                const buildingsElement = document.getElementById('predictorBuildings');
-                const methodElement = document.getElementById('predictorMethod');
-                const statusElement = document.getElementById('predictorStatus');
-                
-                if (locationElement) {
-                    const cities = locationParams.cities || [];
-                    if (cities.length === 1) {
-                        locationElement.textContent = `${cities[0].name} (${cities[0].region})`;
-                    } else if (cities.length <= 3) {
-                        locationElement.textContent = cities.map(c => c.name).join(', ');
-                    } else {
-                        const regions = [...new Set(cities.map(c => c.region))];
-                        locationElement.textContent = `${cities.length} villes (${regions.join(', ')})`;
-                    }
-                }
-                
-                if (populationElement) {
-                    const totalPop = locationParams.total_population || 0;
-                    populationElement.textContent = `${totalPop.toLocaleString()} habitants`;
-                }
-                
-                if (buildingsElement) {
-                    buildingsElement.textContent = `${prediction.total_buildings} bâtiments`;
-                }
-                
-                if (methodElement) {
-                    methodElement.textContent = locationParams.method || 'Prédiction basée sur données Malaysia';
-                }
-                
-                if (statusElement) {
-                    const isRealData = quality.data_quality === 'OFFICIAL';
-                    statusElement.textContent = isRealData ? '🎯 VRAIES DONNÉES MALAYSIA' : '📊 ESTIMATION INTELLIGENTE';
-                    statusElement.className = isRealData ? 'predictor-status' : 'predictor-status estimated';
-                }
-            }
-            
-            updateDistribution(prediction) {
-                const distributionContent = document.getElementById('predictorDistributionContent');
-                if (!distributionContent) return;
-                
-                const buildingCounts = prediction.building_counts || {};
-                const percentages = prediction.percentages || {};
-                
-                const sortedTypes = Object.entries(buildingCounts)
-                    .filter(([type, count]) => count > 0)
-                    .sort(([,a], [,b]) => b - a);
-                
-                if (sortedTypes.length === 0) {
-                    distributionContent.innerHTML = '<div class="prediction-loading">Aucun bâtiment prédit</div>';
-                    return;
-                }
-                
-                let html = '';
-                
-                sortedTypes.forEach(([buildingType, count]) => {
-                    const percentage = percentages[buildingType] || 0;
-                    const isMajor = count >= prediction.total_buildings * 0.1;
-                    
-                    const icons = {
-                        'Residential': '🏠', 'Commercial': '🏪', 'Office': '🏢',
-                        'Industrial': '🏭', 'Hospital': '🏥', 'Clinic': '⚕️',
-                        'School': '🏫', 'Hotel': '🏨', 'Restaurant': '🍽️',
-                        'Retail': '🛍️', 'Warehouse': '📦', 'Factory': '⚙️',
-                        'Apartment': '🏗️'
-                    };
-                    
-                    html += `
-                        <div class="building-prediction-item ${isMajor ? 'major' : ''}">
-                            <div>
-                                <strong>${icons[buildingType] || '🏗️'} ${buildingType}</strong>
-                            </div>
-                            <div>
-                                <span class="prediction-count">${count}</span>
-                                <span class="prediction-percentage">(${percentage.toFixed(1)}%)</span>
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                distributionContent.innerHTML = html;
-            }
-            
-            updateConfidence(quality) {
-                const confidenceElement = document.getElementById('predictorConfidence');
-                const confidenceTextElement = document.getElementById('predictorConfidenceText');
-                
-                if (confidenceElement && confidenceTextElement) {
-                    const confidence = quality.overall_confidence || 0;
-                    
-                    confidenceElement.style.width = `${confidence}%`;
-                    confidenceTextElement.textContent = `${confidence}%`;
-                    
-                    if (confidence >= 90) {
-                        confidenceElement.style.background = 'linear-gradient(90deg, #4caf50 0%, #2e7d32 100%)';
-                    } else if (confidence >= 75) {
-                        confidenceElement.style.background = 'linear-gradient(90deg, #ff9800 0%, #4caf50 100%)';
-                    } else {
-                        confidenceElement.style.background = 'linear-gradient(90deg, #ff5722 0%, #ff9800 100%)';
-                    }
-                }
-            }
-            
-            showLoading() {
-                const distributionContent = document.getElementById('predictorDistributionContent');
-                if (distributionContent) {
-                    distributionContent.innerHTML = `
-                        <div class="prediction-loading">
-                            <div style="display: inline-block; animation: spin 1s linear infinite;">🔄</div>
-                            Calcul de la prédiction...
-                        </div>
-                    `;
-                }
-            }
-            
-            showEmptyState() {
-                const distributionContent = document.getElementById('predictorDistributionContent');
-                if (distributionContent) {
-                    distributionContent.innerHTML = `
-                        <div class="prediction-loading">
-                            🏗️ Spécifiez le nombre de bâtiments pour voir la prédiction
-                        </div>
-                    `;
-                }
-                
-                document.getElementById('predictorLocation').textContent = 'Toute la Malaisie';
-                document.getElementById('predictorPopulation').textContent = 'Population mixte';
-                document.getElementById('predictorBuildings').textContent = '0 bâtiments';
-                document.getElementById('predictorConfidence').style.width = '0%';
-                document.getElementById('predictorConfidenceText').textContent = '0%';
-            }
-            
-            showError(message) {
-                const distributionContent = document.getElementById('predictorDistributionContent');
-                if (distributionContent) {
-                    distributionContent.innerHTML = `
-                        <div class="prediction-error">
-"""
+1. INCLUSION DU SCRIPT:
+   <script src="/static/building_predictor_frontend_fixed.js"></script>
+
+2. UTILISATION DE L'API:
+   // Prédiction simple
+   const prediction = await fetch('/api/predictor/predict', {
+     method: 'POST',
+     headers: {'Content-Type': 'application/json'},
+     body: JSON.stringify({
+       num_buildings: 100,
+       location_params: {
+         cities: [{name: 'Kuala Lumpur', population: 1800000, region: 'Central', type: 'metropolis'}],
+         confidence: 95,
+         method: 'Vraies données'
+       }
+     })
+   }).then(r => r.json());
+
+3. API JAVASCRIPT DISPONIBLE:
+   - window.BuildingPredictorAPI.getCurrentPrediction()
+   - window.BuildingPredictorAPI.forceUpdate()
+   - window.BuildingPredictorAPI.customPrediction(buildings, city, population)
+   - window.diagnosticPredictor()
+   - window.testPredictor()
+
+4. ÉVÉNEMENTS AUTOMATIQUES:
+   Le prédicteur se met à jour automatiquement quand:
+   - Le nombre de bâtiments change
+   - La sélection géographique change
+   - Les filtres de population changent
+
+5. STYLES CSS:
+   Les styles sont inclus automatiquement dans le script.
+   Classes principales: .prediction-panel-fixed, .building-type-prediction-fixed
+
+6. INTÉGRATION AVEC FORMULAIRE EXISTANT:
+   Le prédicteur s'intègre automatiquement avec les éléments:
+   - #numBuildings
+   - #locationMode  
+   - #filterRegion, #filterState, #filterCity
+   - #customCity, #customPopulation
+   
+7. DÉBOGAGE:
+   - Ouvrir la console développeur
+   - Utiliser window.diagnosticPredictor() pour diagnostic
+   - Vérifier window.BuildingPredictorAPI.isReady()
+        """
+
+
+if __name__ == "__main__":
+    print("🔮 Module d'intégration prédicteur chargé")
+    print("Utilisez create_complete_integration(app, generator) pour l'intégrer")

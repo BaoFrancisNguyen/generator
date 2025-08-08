@@ -14,7 +14,7 @@ from pathlib import Path
 
 # Import du validateur corrigé
 try:
-    from quick_validation_fixed import FixedQuickValidator
+    from quick_validation_script import FixedQuickValidator
     from building_distribution import BuildingDistributor
     VALIDATION_AVAILABLE = True
 except ImportError as e:
