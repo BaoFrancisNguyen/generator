@@ -1,0 +1,97 @@
+{
+  "districts": {
+    "Centre Ville": {
+      "name": "Centre Ville",
+      "coordinates": {
+        "lat": [
+          2.1896000000000004,
+          2.2096
+        ],
+        "lon": [
+          102.2394,
+          102.25940000000001
+        ]
+      },
+      "type": "city_center",
+      "suitable_buildings": [
+        "Commercial",
+        "Office",
+        "Hotel",
+        "Restaurant"
+      ],
+      "source": "fallback"
+    },
+    "Zone Residentielle Nord": {
+      "name": "Zone Residentielle Nord",
+      "coordinates": {
+        "lat": [
+          2.1996,
+          2.2096
+        ],
+        "lon": [
+          102.2394,
+          102.24940000000001
+        ]
+      },
+      "type": "residential_district",
+      "suitable_buildings": [
+        "Residential",
+        "School",
+        "Clinic"
+      ],
+      "source": "fallback"
+    },
+    "Zone Residentielle Sud": {
+      "name": "Zone Residentielle Sud",
+      "coordinates": {
+        "lat": [
+          2.1896,
+          2.1996
+        ],
+        "lon": [
+          102.24940000000001,
+          102.2594
+        ]
+      },
+      "type": "residential_district",
+      "suitable_buildings": [
+        "Residential",
+        "School",
+        "Clinic"
+      ],
+      "source": "fallback"
+    },
+    "Zone Industrielle": {
+      "name": "Zone Industrielle",
+      "coordinates": {
+        "lat": [
+          2.1896,
+          2.1996
+        ],
+        "lon": [
+          102.2394,
+          102.24940000000001
+        ]
+      },
+      "type": "industrial_zone",
+      "suitable_buildings": [
+        "Industrial",
+        "Factory",
+        "Warehouse"
+      ],
+      "source": "fallback"
+    }
+  },
+  "sources": [
+    "fallback"
+  ],
+  "api_response_count": 0,
+  "city": "Malacca City",
+  "country": "Malaysia",
+  "last_updated": "2025-08-08T16:34:12.188783",
+  "sources_tried": [
+    "fallback_coordinates",
+    "fallback_error"
+  ],
+  "total_districts": 4
+}

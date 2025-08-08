@@ -1,0 +1,97 @@
+{
+  "districts": {
+    "Centre Ville": {
+      "name": "Centre Ville",
+      "coordinates": {
+        "lat": [
+          6.316700000000001,
+          6.3367
+        ],
+        "lon": [
+          99.81669999999998,
+          99.8367
+        ]
+      },
+      "type": "city_center",
+      "suitable_buildings": [
+        "Commercial",
+        "Office",
+        "Hotel",
+        "Restaurant"
+      ],
+      "source": "fallback"
+    },
+    "Zone Residentielle Nord": {
+      "name": "Zone Residentielle Nord",
+      "coordinates": {
+        "lat": [
+          6.326700000000001,
+          6.3367
+        ],
+        "lon": [
+          99.8167,
+          99.82669999999999
+        ]
+      },
+      "type": "residential_district",
+      "suitable_buildings": [
+        "Residential",
+        "School",
+        "Clinic"
+      ],
+      "source": "fallback"
+    },
+    "Zone Residentielle Sud": {
+      "name": "Zone Residentielle Sud",
+      "coordinates": {
+        "lat": [
+          6.3167,
+          6.326700000000001
+        ],
+        "lon": [
+          99.82669999999999,
+          99.8367
+        ]
+      },
+      "type": "residential_district",
+      "suitable_buildings": [
+        "Residential",
+        "School",
+        "Clinic"
+      ],
+      "source": "fallback"
+    },
+    "Zone Industrielle": {
+      "name": "Zone Industrielle",
+      "coordinates": {
+        "lat": [
+          6.3167,
+          6.326700000000001
+        ],
+        "lon": [
+          99.8167,
+          99.82669999999999
+        ]
+      },
+      "type": "industrial_zone",
+      "suitable_buildings": [
+        "Industrial",
+        "Factory",
+        "Warehouse"
+      ],
+      "source": "fallback"
+    }
+  },
+  "sources": [
+    "fallback"
+  ],
+  "api_response_count": 0,
+  "city": "Langkawi",
+  "country": "Malaysia",
+  "last_updated": "2025-08-08T16:34:12.201171",
+  "sources_tried": [
+    "fallback_coordinates",
+    "fallback_error"
+  ],
+  "total_districts": 4
+}

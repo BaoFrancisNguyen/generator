@@ -1,0 +1,97 @@
+{
+  "districts": {
+    "Centre Ville": {
+      "name": "Centre Ville",
+      "coordinates": {
+        "lat": [
+          4.5833,
+          4.6033
+        ],
+        "lon": [
+          101.0833,
+          101.1033
+        ]
+      },
+      "type": "city_center",
+      "suitable_buildings": [
+        "Commercial",
+        "Office",
+        "Hotel",
+        "Restaurant"
+      ],
+      "source": "fallback"
+    },
+    "Zone Residentielle Nord": {
+      "name": "Zone Residentielle Nord",
+      "coordinates": {
+        "lat": [
+          4.5933,
+          4.6033
+        ],
+        "lon": [
+          101.0833,
+          101.0933
+        ]
+      },
+      "type": "residential_district",
+      "suitable_buildings": [
+        "Residential",
+        "School",
+        "Clinic"
+      ],
+      "source": "fallback"
+    },
+    "Zone Residentielle Sud": {
+      "name": "Zone Residentielle Sud",
+      "coordinates": {
+        "lat": [
+          4.5833,
+          4.5933
+        ],
+        "lon": [
+          101.0933,
+          101.1033
+        ]
+      },
+      "type": "residential_district",
+      "suitable_buildings": [
+        "Residential",
+        "School",
+        "Clinic"
+      ],
+      "source": "fallback"
+    },
+    "Zone Industrielle": {
+      "name": "Zone Industrielle",
+      "coordinates": {
+        "lat": [
+          4.5833,
+          4.5933
+        ],
+        "lon": [
+          101.0833,
+          101.0933
+        ]
+      },
+      "type": "industrial_zone",
+      "suitable_buildings": [
+        "Industrial",
+        "Factory",
+        "Warehouse"
+      ],
+      "source": "fallback"
+    }
+  },
+  "sources": [
+    "fallback"
+  ],
+  "api_response_count": 0,
+  "city": "Ipoh",
+  "country": "Malaysia",
+  "last_updated": "2025-08-08T16:34:12.172271",
+  "sources_tried": [
+    "fallback_coordinates",
+    "fallback_error"
+  ],
+  "total_districts": 4
+}

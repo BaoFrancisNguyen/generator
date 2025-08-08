@@ -1,0 +1,97 @@
+{
+  "districts": {
+    "Centre Ville": {
+      "name": "Centre Ville",
+      "coordinates": {
+        "lat": [
+          3.99,
+          4.01
+        ],
+        "lon": [
+          108.99,
+          109.01
+        ]
+      },
+      "type": "city_center",
+      "suitable_buildings": [
+        "Commercial",
+        "Office",
+        "Hotel",
+        "Restaurant"
+      ],
+      "source": "fallback"
+    },
+    "Zone Residentielle Nord": {
+      "name": "Zone Residentielle Nord",
+      "coordinates": {
+        "lat": [
+          4.0,
+          6.0
+        ],
+        "lon": [
+          100.0,
+          109.0
+        ]
+      },
+      "type": "residential_district",
+      "suitable_buildings": [
+        "Residential",
+        "School",
+        "Clinic"
+      ],
+      "source": "fallback"
+    },
+    "Zone Residentielle Sud": {
+      "name": "Zone Residentielle Sud",
+      "coordinates": {
+        "lat": [
+          2.0,
+          4.0
+        ],
+        "lon": [
+          109.0,
+          118.0
+        ]
+      },
+      "type": "residential_district",
+      "suitable_buildings": [
+        "Residential",
+        "School",
+        "Clinic"
+      ],
+      "source": "fallback"
+    },
+    "Zone Industrielle": {
+      "name": "Zone Industrielle",
+      "coordinates": {
+        "lat": [
+          2.0,
+          4.0
+        ],
+        "lon": [
+          100.0,
+          109.0
+        ]
+      },
+      "type": "industrial_zone",
+      "suitable_buildings": [
+        "Industrial",
+        "Factory",
+        "Warehouse"
+      ],
+      "source": "fallback"
+    }
+  },
+  "sources": [
+    "fallback"
+  ],
+  "api_response_count": 0,
+  "city": "Seri Kembangan",
+  "country": "Malaysia",
+  "last_updated": "2025-08-08T16:34:12.208748",
+  "sources_tried": [
+    "fallback_coordinates",
+    "fallback_error"
+  ],
+  "total_districts": 4
+}

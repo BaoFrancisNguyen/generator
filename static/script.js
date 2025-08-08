@@ -1,11 +1,11 @@
 // script.js - Version corrigée pour le générateur de données électriques Malaysia
-// Corrige les problèmes de génération de données
+// Corrige les problèmes d'affichage des résultats
 
 // Variables globales
 let malaysiaData = {};
 let systemCapabilities = {};
 
-// Charger les données au démarrage - Version simplifiée et robuste
+// Charger les données au démarrage
 window.onload = function() {
     console.log('🚀 Initialisation de l\'application Malaysia...');
     loadMalaysiaData();
@@ -13,7 +13,7 @@ window.onload = function() {
     updateEstimation();
 };
 
-// ==================== CHARGEMENT DES DONNÉES - SIMPLIFIÉ ====================
+// ==================== CHARGEMENT DES DONNÉES ====================
 
 async function loadMalaysiaData() {
     try {
@@ -36,7 +36,6 @@ async function loadMalaysiaData() {
 }
 
 function useFallbackData() {
-    // Données de fallback pour assurer le fonctionnement
     malaysiaData = {
         'Kuala Lumpur': {'population': 1800000, 'state': 'Federal Territory', 'region': 'Central'},
         'George Town': {'population': 708000, 'state': 'Penang', 'region': 'Northern'},
@@ -74,7 +73,7 @@ function setDefaultCapabilities() {
     updateSystemStatusUI(systemCapabilities);
 }
 
-// ==================== MISE À JOUR UI - SIMPLIFIÉE ====================
+// ==================== MISE À JOUR UI ====================
 
 function updateSystemStatusUI(status) {
     console.log('🎨 Mise à jour UI avec statut:', status);
@@ -101,35 +100,9 @@ function updateSystemStatusUI(status) {
             `;
         }
     }
-    
-    const realDataPanel = document.getElementById('realDataPanel');
-    if (realDataPanel) {
-        realDataPanel.style.display = status.real_data_available ? 'block' : 'none';
-    }
-    
-    const systemStatusDiv = document.getElementById('systemStatus');
-    if (systemStatusDiv) {
-        systemStatusDiv.innerHTML = `
-            <div class="status-card ${status.real_data_available ? 'active' : 'inactive'}">
-                <h4>🎯 Vraies Données</h4>
-                <p>${status.real_data_available ? '✅ ACTIVES' : '❌ NON DISPONIBLES'}</p>
-                <small>${status.real_data_available ? 'Sources officielles Malaysia' : 'Estimations utilisées'}</small>
-            </div>
-            <div class="status-card ${status.validation_enabled ? 'active' : 'inactive'}">
-                <h4>🔍 Validation</h4>
-                <p>${status.validation_enabled ? '✅ ACTIVE' : '❌ NON DISPONIBLE'}</p>
-                <small>${status.validation_enabled ? 'Contrôle qualité' : 'Pas de validation'}</small>
-            </div>
-            <div class="status-card ${status.building_distributor_available ? 'active' : 'inactive'}">
-                <h4>🏗️ Distribution</h4>
-                <p>${status.building_distributor_available ? '✅ AVANCÉE' : '⚠️ BASIQUE'}</p>
-                <small>${status.building_distributor_available ? 'Réaliste' : 'Mode simplifié'}</small>
-            </div>
-        `;
-    }
 }
 
-// ==================== FONCTIONS DE FILTRAGE - SIMPLIFIÉES ====================
+// ==================== FONCTIONS DE FILTRAGE ====================
 
 function populateFilterOptions() {
     const regionSelect = document.getElementById('filterRegion');
@@ -260,7 +233,7 @@ function updatePopulationInputs() {
     }
 }
 
-// ==================== ESTIMATION - SIMPLIFIÉE ====================
+// ==================== ESTIMATION ====================
 
 function updateEstimation() {
     const numBuildings = parseInt(document.getElementById('numBuildings')?.value) || 0;
@@ -354,7 +327,7 @@ function updateEstimation() {
         useCase = "🏭 Production";
     }
     
-    // Mise à jour de l'interface - avec protection contre erreurs
+    // Mise à jour de l'interface
     const updates = {
         'totalObservations': totalObservations.toLocaleString(),
         'fileSize': fileSizeMB > 1 ? `${Math.round(fileSizeMB)} MB` : `${Math.round(fileSizeMB * 1024)} KB`,
@@ -405,17 +378,12 @@ async function generateData() {
         }
         
         const data = await response.json();
-        console.log('✅ Données parsées:', data.success);
+        console.log('✅ Données parsées:', data);
         
         showLoading(false);
         
         if (data.success) {
             showResults(data);
-            
-            if (data.validation && data.validation.enabled) {
-                showValidation(data.validation);
-            }
-            
             console.log('🎉 Génération réussie!');
         } else {
             throw new Error(data.error || 'Erreur inconnue');
@@ -476,6 +444,8 @@ async function showSample() {
     console.log('👁️ Génération échantillon...');
     
     try {
+        showLoading(true);
+        
         const response = await fetch('/sample');
         
         if (!response.ok) {
@@ -483,6 +453,8 @@ async function showSample() {
         }
         
         const data = await response.json();
+        
+        showLoading(false);
         
         if (data.success) {
             showResults(data, true);
@@ -492,11 +464,12 @@ async function showSample() {
         
     } catch (error) {
         console.error('❌ Erreur échantillon:', error);
+        showLoading(false);
         showError(`Erreur: ${error.message}`);
     }
 }
 
-// ==================== GESTION DES PARAMÈTRES - CORRIGÉE ====================
+// ==================== GESTION DES PARAMÈTRES ====================
 
 function getFormParams() {
     try {
@@ -579,7 +552,7 @@ function getFormParams() {
     }
 }
 
-// ==================== AFFICHAGE DES RÉSULTATS - SIMPLIFIÉ ====================
+// ==================== AFFICHAGE DES RÉSULTATS - VERSION CORRIGÉE ====================
 
 function showLoading(show) {
     const loading = document.getElementById('loading');
@@ -597,6 +570,8 @@ function hideResults() {
 }
 
 function showResults(data, isSample = false) {
+    console.log('🎨 Affichage des résultats:', data);
+    
     const resultsDiv = document.getElementById('results');
     const alertsDiv = document.getElementById('alerts');
     const statsDiv = document.getElementById('statsGrid');
@@ -618,40 +593,68 @@ function showResults(data, isSample = false) {
         </div>
     `;
     
-    // Statistiques
+    // Statistiques - CORRECTION CRITIQUE: utiliser les bonnes clés
     if (data.stats && statsDiv) {
+        const stats = data.stats;
         statsDiv.innerHTML = `
             <div class="stat-card">
-                <h3>${data.stats.total_records?.toLocaleString() || 0}</h3>
-                <p>Observations</p>
-            </div>
-            <div class="stat-card">
-                <h3>${data.stats.buildings_count || 0}</h3>
+                <h3>${(stats.total_records || stats.buildings_count || 0).toLocaleString()}</h3>
                 <p>Bâtiments</p>
             </div>
             <div class="stat-card">
-                <h3>${data.stats.avg_consumption || 0}</h3>
+                <h3>${(data.location_analysis?.length || 0)}</h3>
+                <p>Villes</p>
+            </div>
+            <div class="stat-card">
+                <h3>${(stats.avg_consumption || 0).toFixed(1)}</h3>
                 <p>Consommation Moy. (kWh)</p>
             </div>
             <div class="stat-card">
-                <h3>${data.stats.max_consumption || 0}</h3>
+                <h3>${(stats.max_consumption || 0).toFixed(1)}</h3>
                 <p>Pic Max (kWh)</p>
             </div>
         `;
     }
     
-    // Aperçu des données
-    if (data.buildings && data.timeseries && previewDiv) {
+    // Aperçu des données - CORRECTION CRITIQUE: gérer les différentes structures
+    if (previewDiv) {
+        let buildingsData = [];
+        let timeseriesData = [];
+        let locationAnalysis = [];
+        
+        // Extraction flexible des données selon la structure de réponse
+        if (data.buildings && Array.isArray(data.buildings)) {
+            buildingsData = data.buildings;
+        } else if (data.sample_buildings && Array.isArray(data.sample_buildings)) {
+            buildingsData = data.sample_buildings;
+        }
+        
+        if (data.timeseries && Array.isArray(data.timeseries)) {
+            timeseriesData = data.timeseries;
+        } else if (data.sample_timeseries && Array.isArray(data.sample_timeseries)) {
+            timeseriesData = data.sample_timeseries;
+        }
+        
+        if (data.location_analysis && Array.isArray(data.location_analysis)) {
+            locationAnalysis = data.location_analysis;
+        }
+        
+        console.log('📊 Données extraites:', {
+            buildings: buildingsData.length,
+            timeseries: timeseriesData.length,
+            locations: locationAnalysis.length
+        });
+        
         let locationAnalysisHTML = '';
         
-        if (data.location_analysis && data.location_analysis.length > 0) {
+        if (locationAnalysis.length > 0) {
             locationAnalysisHTML = `
                 <div style="margin-top: 20px;">
                     <h4>🏙️ Analyse par Ville</h4>
                     <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px;">
             `;
             
-            data.location_analysis.forEach(location => {
+            locationAnalysis.forEach(location => {
                 const isRealData = location.data_source === 'VRAIES DONNÉES';
                 const badge = isRealData ? 
                     '<span class="data-quality-badge badge-official">OFFICIEL</span>' :
@@ -660,8 +663,8 @@ function showResults(data, isSample = false) {
                 locationAnalysisHTML += `
                     <div class="city-data-item ${isRealData ? 'official' : 'estimated'}">
                         <div>
-                            <strong>${location.location}</strong> (${location.state})
-                            <br><small>${location.population.toLocaleString()} hab. - ${location.building_count} bâtiments</small>
+                            <strong>${location.location}</strong> (${location.state || 'État inconnu'})
+                            <br><small>${(location.population || 0).toLocaleString()} hab. - ${location.building_count || 0} bâtiments</small>
                         </div>
                         <div>${badge}</div>
                     </div>
@@ -671,11 +674,10 @@ function showResults(data, isSample = false) {
             locationAnalysisHTML += '</div></div>';
         }
         
-        const buildings = Array.isArray(data.buildings) ? data.buildings : [];
-        const timeseries = Array.isArray(data.timeseries) ? data.timeseries : [];
-        
-        previewDiv.innerHTML = `
-            <div class="data-preview">
+        // Affichage des bâtiments
+        let buildingsHTML = '';
+        if (buildingsData.length > 0) {
+            buildingsHTML = `
                 <h3>📋 Aperçu des Métadonnées - Villes de Malaisie</h3>
                 <div style="overflow-x: auto; margin-bottom: 30px;">
                     <table>
@@ -689,9 +691,9 @@ function showResults(data, isSample = false) {
                             </tr>
                         </thead>
                         <tbody>
-                            ${buildings.slice(0, 10).map(b => `
+                            ${buildingsData.slice(0, 10).map(b => `
                                 <tr>
-                                    <td>${(b.unique_id || '').substring(0, 8)}...</td>
+                                    <td>${(b.unique_id || b.building_id || '').substring(0, 8)}...</td>
                                     <td><strong>${b.building_class || 'N/A'}</strong></td>
                                     <td>${b.location || 'N/A'}</td>
                                     <td>${b.state || 'N/A'}</td>
@@ -701,9 +703,13 @@ function showResults(data, isSample = false) {
                         </tbody>
                     </table>
                 </div>
-                
-                ${locationAnalysisHTML}
-                
+            `;
+        }
+        
+        // Affichage des séries temporelles
+        let timeseriesHTML = '';
+        if (timeseriesData.length > 0) {
+            timeseriesHTML = `
                 <h3>⚡ Aperçu des Données de Consommation</h3>
                 <div style="overflow-x: auto;">
                     <table>
@@ -715,16 +721,28 @@ function showResults(data, isSample = false) {
                             </tr>
                         </thead>
                         <tbody>
-                            ${timeseries.slice(0, 15).map(t => `
+                            ${timeseriesData.slice(0, 15).map(t => `
                                 <tr>
                                     <td>${(t.unique_id || '').substring(0, 8)}...</td>
-                                    <td>${t.timestamp ? new Date(t.timestamp).toLocaleString('fr-FR') : 'N/A'}</td>
+                                    <td>${t.ds || t.timestamp ? new Date(t.ds || t.timestamp).toLocaleString('fr-FR') : 'N/A'}</td>
                                     <td><strong>${t.y || 0}</strong></td>
                                 </tr>
                             `).join('')}
                         </tbody>
                     </table>
                 </div>
+            `;
+        }
+        
+        // Assemblage final
+        previewDiv.innerHTML = `
+            <div class="data-preview">
+                ${locationAnalysisHTML}
+                ${buildingsHTML}
+                ${timeseriesHTML}
+                ${buildingsData.length === 0 && timeseriesData.length === 0 ? 
+                    '<div style="text-align: center; padding: 20px; color: #666;"><p>🔄 Aperçu des données en cours de génération...</p></div>' : ''
+                }
             </div>
         `;
     }
@@ -734,8 +752,13 @@ function showResults(data, isSample = false) {
         showDataQualityInfo(data.data_sources);
     }
     
+    // Validation si disponible
+    if (data.validation && data.validation.enabled) {
+        showValidation(data.validation);
+    }
+    
     resultsDiv.classList.add('show');
-    console.log('✅ Résultats affichés');
+    console.log('✅ Résultats affichés avec succès');
 }
 
 function showValidation(validationData) {
@@ -797,6 +820,8 @@ function showDataQualityInfo(dataSources) {
             </div>
         `;
     }
+    
+    dataQualityPanel.style.display = 'block';
 }
 
 function showSuccess(message) {
@@ -845,7 +870,8 @@ function debugApp() {
     const criticalElements = [
         'dataStatusIndicator', 'systemStatus', 'realDataPanel',
         'numBuildings', 'startDate', 'endDate', 'freq',
-        'locationMode', 'filterRegion', 'loading', 'results', 'alerts'
+        'locationMode', 'filterRegion', 'loading', 'results', 'alerts',
+        'statsGrid', 'dataPreview'
     ];
     
     const elementStatus = {};
@@ -967,11 +993,13 @@ showSample()       - Afficher échantillon
 2. Pas de réponse: Vérifiez la connexion
 3. Interface figée: Rafraîchissez (F5)
 4. Paramètres invalides: Vérifiez les champs
+5. Résultats vides: Vérifiez la structure des données
 
 💡 CONSEILS:
 - Commencez avec 5-10 bâtiments
 - Utilisez une période courte (1 semaine)
 - Vérifiez que les dates sont valides
+- Ouvrez les outils développeur pour plus d'infos
 `;
     
     console.log(help);
@@ -1000,7 +1028,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('📄 DOM chargé, vérifications finales...');
     
     // Vérifier éléments essentiels
-    const essential = ['numBuildings', 'startDate', 'endDate', 'freq'];
+    const essential = ['numBuildings', 'startDate', 'endDate', 'freq', 'results', 'alerts', 'statsGrid', 'dataPreview'];
     const missing = essential.filter(id => !document.getElementById(id));
     
     if (missing.length > 0) {
@@ -1021,15 +1049,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Message de bienvenue
 console.log(`
-🇲🇾 GÉNÉRATEUR MALAYSIA - VERSION CORRIGÉE
-==========================================
+🇲🇾 GÉNÉRATEUR MALAYSIA - VERSION CORRIGÉE AFFICHAGE
+=====================================================
 ✅ JavaScript fonctionnel chargé
 🔧 Fonctions de débogage disponibles
 🎯 Support vraies données officielles
+🐛 Gestion d'erreurs améliorée
+📊 Affichage des résultats corrigé
 
 Pour déboguer: debugApp()
 Pour aide: helpApp()
 Pour test API: testAPI()
+
+CORRECTIFS APPLIQUÉS:
+- Structure flexible des données de réponse
+- Gestion des différents formats (buildings/sample_buildings)
+- Extraction sécurisée des statistiques
+- Affichage robuste même avec données partielles
+- Debugging amélioré pour identifier les problèmes
 
 Prêt à générer des données pour Malaysia! 🚀
 `);
