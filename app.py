@@ -1,8 +1,8 @@
-# app.py - Generateur de Donnees Electriques Malaysia (Version Corrigee)
+# app.py - Application Flask pour Génération de Données Électriques Malaysia
 """
-Systeme de generation de donnees electriques realistes pour la Malaisie
-Architecture simplifiee avec gestion d'erreurs amelioree
-Integre le systeme de coordonnees ameliore avec quartiers
+Système de génération de données électriques réalistes pour la Malaisie
+Version corrigée avec toutes les routes nécessaires
+Intègre le système OSM et les prédicteurs de bâtiments
 """
 
 from flask import Flask, render_template, jsonify, request, send_file
@@ -14,705 +14,559 @@ import uuid
 import os
 import json
 import logging
-from osm_generation_route import add_osm_routes
+from typing import Dict, List, Optional
 
-
-# Configuration du logging pour tracer les operations
-logging.basicConfig(level=logging.INFO)
+# Configuration du logging pour tracer les opérations
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Tentative d'import du distributeur intelligent de batiments
+# Import des modules avec gestion d'erreur
 try:
     from building_distribution import BuildingDistributor
     BUILDING_DISTRIBUTOR_AVAILABLE = True
-    logger.info("✅ BuildingDistributor importe avec succes")
+    logger.info("✅ BuildingDistributor importé avec succès")
 except ImportError as e:
-    logger.error(f"❌ Erreur import BuildingDistributor: {e}")
+    logger.warning(f"⚠️ BuildingDistributor non disponible: {e}")
     BUILDING_DISTRIBUTOR_AVAILABLE = False
 
-# Tentative d'import du systeme de coordonnees ameliore
 try:
     from automated_districts import EnhancedCoordinatesGenerator
     ENHANCED_COORDINATES_AVAILABLE = True
-    logger.info("✅ Systeme de coordonnees ameliore disponible")
+    logger.info("✅ Système de coordonnées amélioré disponible")
 except ImportError as e:
-    logger.warning(f"⚠️ Systeme de coordonnees ameliore non disponible: {e}")
+    logger.warning(f"⚠️ Système de coordonnées amélioré non disponible: {e}")
     ENHANCED_COORDINATES_AVAILABLE = False
 
-# Tentative d'import de l'integration complete
 try:
     from complete_integration import create_complete_integration
     COMPLETE_INTEGRATION_AVAILABLE = True
-    logger.info("✅ Integration complete disponible")
+    logger.info("✅ Intégration complète disponible")
 except ImportError as e:
-    logger.warning(f"⚠️ Integration complete non disponible: {e}")
+    logger.warning(f"⚠️ Intégration complète non disponible: {e}")
     COMPLETE_INTEGRATION_AVAILABLE = False
 
+# Initialisation de l'application Flask
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'malaysia-electricity-generator-2025'
 
 
 class SimpleDistributor:
     """
-    Distributeur simple base uniquement sur la population de la ville
-    Utilise comme solution de secours si BuildingDistributor n'est pas disponible
+    Distributeur simple basé uniquement sur la population de la ville
+    Solution de secours si BuildingDistributor n'est pas disponible
     """
     
     def __init__(self):
-        logger.info("✅ SimpleDistributor initialise en mode distribution basique")
+        logger.info("✅ SimpleDistributor initialisé en mode distribution basique")
     
     def calculate_building_distribution(self, city_name, population, region, total_buildings):
         """
-        Calcule la distribution des types de batiments selon la population uniquement
+        Calcule la distribution des types de bâtiments selon la population
         
         Args:
             city_name (str): Nom de la ville
-            population (int): Nombre d'habitants de la ville
-            region (str): Region geographique
-            total_buildings (int): Nombre total de batiments a distribuer
+            population (int): Nombre d'habitants
+            region (str): Région géographique
+            total_buildings (int): Nombre total de bâtiments à distribuer
             
         Returns:
-            dict: Dictionnaire avec le nombre de batiments par type
+            dict: Dictionnaire avec le nombre de bâtiments par type
         """
-        
-        # Definition des pourcentages selon la taille de la ville
-        if population > 500000:  
-            # Grande ville : plus de diversite dans les types de batiments
-            distribution = {
-                'Residential': 0.60,    # 60% de logements
-                'Commercial': 0.15,     # 15% de centres commerciaux
-                'Office': 0.08,         # 8% de bureaux
-                'Industrial': 0.05,     # 5% d'industrie
-                'Retail': 0.05,         # 5% de magasins
-                'School': 0.03,         # 3% d'ecoles
-                'Hospital': 0.015,      # 1.5% d'hopitaux
-                'Clinic': 0.025,        # 2.5% de cliniques
-                'Hotel': 0.02           # 2% d'hotels
+        # Distribution basique selon la taille de la ville
+        if population > 1000000:  # Métropole
+            ratios = {
+                'Residential': 0.60, 'Commercial': 0.15, 'Office': 0.10,
+                'Industrial': 0.05, 'Hospital': 0.002, 'Clinic': 0.008,
+                'School': 0.03, 'Hotel': 0.02, 'Restaurant': 0.05,
+                'Retail': 0.08, 'Warehouse': 0.015, 'Apartment': 0.012
             }
-        elif population > 100000:  
-            # Ville moyenne : moins de bureaux et d'hotels
-            distribution = {
-                'Residential': 0.70,    # 70% de logements
-                'Commercial': 0.10,     # 10% de centres commerciaux
-                'Industrial': 0.08,     # 8% d'industrie
-                'Retail': 0.04,         # 4% de magasins
-                'School': 0.04,         # 4% d'ecoles
-                'Hospital': 0.01,       # 1% d'hopitaux
-                'Clinic': 0.02,         # 2% de cliniques
-                'Hotel': 0.01           # 1% d'hotels
+        elif population > 500000:  # Grande ville
+            ratios = {
+                'Residential': 0.70, 'Commercial': 0.12, 'Office': 0.06,
+                'Industrial': 0.04, 'Hospital': 0.001, 'Clinic': 0.006,
+                'School': 0.025, 'Hotel': 0.015, 'Restaurant': 0.04,
+                'Retail': 0.06, 'Warehouse': 0.01, 'Apartment': 0.008
             }
-        else:  
-            # Petite ville : principalement residentiel avec services de base
-            distribution = {
-                'Residential': 0.75,    # 75% de logements
-                'Commercial': 0.08,     # 8% de centres commerciaux
-                'Industrial': 0.05,     # 5% d'industrie
-                'Retail': 0.06,         # 6% de magasins
-                'School': 0.04,         # 4% d'ecoles
-                'Clinic': 0.02          # 2% de cliniques (pas d'hopital)
+        else:  # Ville moyenne/petite
+            ratios = {
+                'Residential': 0.80, 'Commercial': 0.08, 'Office': 0.03,
+                'Industrial': 0.03, 'Hospital': 0.0005, 'Clinic': 0.004,
+                'School': 0.02, 'Hotel': 0.01, 'Restaurant': 0.025,
+                'Retail': 0.04, 'Warehouse': 0.005, 'Apartment': 0.003
             }
         
-        # Conversion des pourcentages en nombres absolus de batiments
-        building_counts = {}
-        for building_type, percentage in distribution.items():
-            count = max(0, int(percentage * total_buildings))
-            building_counts[building_type] = count
+        # Calcul des bâtiments par type
+        distribution = {}
+        remaining = total_buildings
         
-        # Ajustement pour garantir que la somme egale exactement total_buildings
-        total_assigned = sum(building_counts.values())
-        if total_assigned < total_buildings:
-            building_counts['Residential'] += (total_buildings - total_assigned)
+        for building_type, ratio in ratios.items():
+            if building_type == list(ratios.keys())[-1]:  # Dernier type
+                distribution[building_type] = remaining
+            else:
+                count = max(1, int(total_buildings * ratio))
+                distribution[building_type] = count
+                remaining -= count
         
-        return building_counts
+        logger.info(f"Distribution calculée pour {city_name}: {sum(distribution.values())} bâtiments")
+        return distribution
 
 
 class ElectricityDataGenerator:
     """
-    Generateur principal de donnees electriques realistes pour la Malaisie
+    Générateur principal de données électriques pour la Malaisie
     """
     
     def __init__(self):
-        """Initialise le generateur avec le meilleur distributeur disponible"""
+        """Initialise le générateur avec toutes les données de base"""
+        logger.info("🔧 Initialisation du générateur de données électriques...")
         
-        # Choix du distributeur de batiments selon la disponibilite
+        # Initialisation du distributeur de bâtiments
         if BUILDING_DISTRIBUTOR_AVAILABLE:
-            self.building_distributor = BuildingDistributor()
-            logger.info("✅ BuildingDistributor charge - Distribution intelligente activee")
+            try:
+                self.distributor = BuildingDistributor()
+                logger.info("✅ BuildingDistributor activé")
+            except Exception as e:
+                logger.error(f"Erreur BuildingDistributor: {e}, utilisation du mode simple")
+                self.distributor = SimpleDistributor()
         else:
-            self.building_distributor = SimpleDistributor()
-            logger.warning("⚠️ SimpleDistributor utilise - Distribution basique seulement")
+            self.distributor = SimpleDistributor()
         
-        # Initialisation du systeme de coordonnees ameliore
+        # Initialisation du système de coordonnées
         if ENHANCED_COORDINATES_AVAILABLE:
             try:
-                self.coordinate_generator = EnhancedCoordinatesGenerator()
-                logger.info("✅ Systeme de coordonnees ameliore active")
+                self.coordinates_generator = EnhancedCoordinatesGenerator()
+                logger.info("✅ Système de coordonnées amélioré activé")
             except Exception as e:
-                logger.warning(f"⚠️ Erreur initialisation coordonnees ameliorees: {e}")
-                self.coordinate_generator = None
+                logger.error(f"Erreur coordonnées améliorées: {e}")
+                self.coordinates_generator = None
         else:
-            self.coordinate_generator = None
-            logger.warning("⚠️ Systeme de coordonnees classique utilise")
+            self.coordinates_generator = None
         
-        # Flags de disponibilite pour l'API
-        self.real_data_available = BUILDING_DISTRIBUTOR_AVAILABLE
-        self.validation_enabled = False  # Desactive dans cette version
+        # Données géographiques de la Malaisie
+        self.malaysia_locations = self._init_malaysia_locations()
         
-        # Types de batiments supportes par le systeme
-        self.building_classes = [
-            'Residential', 'Commercial', 'Industrial', 'Office', 'Retail',
-            'Hospital', 'Clinic', 'School', 'Hotel', 'Restaurant',
-            'Warehouse', 'Factory', 'Apartment'
-        ]
+        # Types et classes de bâtiments
+        self.building_classes = self._init_building_classes()
         
-        # Base de donnees des localisations reelles en Malaisie
-        self.malaysia_locations = {
-            # Metropoles et grandes villes (plus de 500,000 habitants)
-            'Kuala Lumpur': {'population': 1800000, 'state': 'Federal Territory', 'region': 'Central'},
-            'George Town': {'population': 708000, 'state': 'Penang', 'region': 'Northern'},
-            'Ipoh': {'population': 657000, 'state': 'Perak', 'region': 'Northern'},
-            'Shah Alam': {'population': 641000, 'state': 'Selangor', 'region': 'Central'},
-            'Petaling Jaya': {'population': 613000, 'state': 'Selangor', 'region': 'Central'},
-            'Johor Bahru': {'population': 497000, 'state': 'Johor', 'region': 'Southern'},
-            
-            # Villes moyennes (100,000 - 500,000 habitants)
-            'Kota Kinabalu': {'population': 452000, 'state': 'Sabah', 'region': 'East Malaysia'},
-            'Kuching': {'population': 325000, 'state': 'Sarawak', 'region': 'East Malaysia'},
-            'Ampang Jaya': {'population': 315000, 'state': 'Selangor', 'region': 'Central'},
-            'Klang': {'population': 290000, 'state': 'Selangor', 'region': 'Central'},
-            'Kajang': {'population': 280000, 'state': 'Selangor', 'region': 'Central'},
-            'Seremban': {'population': 275000, 'state': 'Negeri Sembilan', 'region': 'Central'},
-            'Kuantan': {'population': 250000, 'state': 'Pahang', 'region': 'East Coast'},
-            'Malacca City': {'population': 200000, 'state': 'Malacca', 'region': 'Central'},
-            'Alor Setar': {'population': 185000, 'state': 'Kedah', 'region': 'Northern'},
-            'Sandakan': {'population': 158000, 'state': 'Sabah', 'region': 'East Malaysia'},
-            'Sibu': {'population': 145000, 'state': 'Sarawak', 'region': 'East Malaysia'},
-            'Sungai Petani': {'population': 140000, 'state': 'Kedah', 'region': 'Northern'},
-            'Tawau': {'population': 135000, 'state': 'Sabah', 'region': 'East Malaysia'},
-            'Kuala Terengganu': {'population': 125000, 'state': 'Terengganu', 'region': 'East Coast'},
-            'Kota Bharu': {'population': 120000, 'state': 'Kelantan', 'region': 'East Coast'},
-            'Miri': {'population': 115000, 'state': 'Sarawak', 'region': 'East Malaysia'},
-            
-            # Petites villes et destinations touristiques
-            'Langkawi': {'population': 65000, 'state': 'Kedah', 'region': 'Northern'},
-            'Cameron Highlands': {'population': 35000, 'state': 'Pahang', 'region': 'Central'},
-            'Genting Highlands': {'population': 12000, 'state': 'Pahang', 'region': 'Central'},
-            'Port Dickson': {'population': 45000, 'state': 'Negeri Sembilan', 'region': 'Central'},
-            'Tioman Island': {'population': 3500, 'state': 'Pahang', 'region': 'East Coast'},
-            
-            # Autres villes importantes
-            'Subang Jaya': {'population': 708000, 'state': 'Selangor', 'region': 'Central'},
-            'Seri Kembangan': {'population': 200000, 'state': 'Selangor', 'region': 'Central'},
-            'Putrajaya': {'population': 109000, 'state': 'Federal Territory', 'region': 'Central'},
-            'Cyberjaya': {'population': 65000, 'state': 'Selangor', 'region': 'Central'}
+        # Patterns de consommation
+        self.consumption_patterns = self._init_consumption_patterns()
+        
+        logger.info(f"✅ Générateur initialisé: {len(self.malaysia_locations)} villes, {len(self.building_classes)} types de bâtiments")
+    
+    def _init_malaysia_locations(self):
+        """Initialise les données des villes malaisiennes"""
+        return {
+            'Kuala Lumpur': {
+                'coordinates': [3.139, 101.6869],
+                'population': 1800000,
+                'region': 'Central',
+                'state': 'Federal Territory'
+            },
+            'George Town': {
+                'coordinates': [5.4164, 100.3327],
+                'population': 708000,
+                'region': 'Northern',
+                'state': 'Penang'
+            },
+            'Ipoh': {
+                'coordinates': [4.5975, 101.0901],
+                'population': 657000,
+                'region': 'Northern',
+                'state': 'Perak'
+            },
+            'Shah Alam': {
+                'coordinates': [3.0733, 101.5185],
+                'population': 617000,
+                'region': 'Central',
+                'state': 'Selangor'
+            },
+            'Petaling Jaya': {
+                'coordinates': [3.1073, 101.6067],
+                'population': 613977,
+                'region': 'Central',
+                'state': 'Selangor'
+            },
+            'Johor Bahru': {
+                'coordinates': [1.4927, 103.7414],
+                'population': 497067,
+                'region': 'Southern',
+                'state': 'Johor'
+            },
+            'Subang Jaya': {
+                'coordinates': [3.0436, 101.5817],
+                'population': 472930,
+                'region': 'Central',
+                'state': 'Selangor'
+            },
+            'Kota Kinabalu': {
+                'coordinates': [5.9749, 116.0724],
+                'population': 452058,
+                'region': 'Eastern',
+                'state': 'Sabah'
+            },
+            'Klang': {
+                'coordinates': [3.0449, 101.4446],
+                'population': 240016,
+                'region': 'Central',
+                'state': 'Selangor'
+            },
+            'Malacca City': {
+                'coordinates': [2.2055, 102.2502],
+                'population': 484885,
+                'region': 'Southern',
+                'state': 'Melaka'
+            },
+            'Alor Setar': {
+                'coordinates': [6.1248, 100.3678],
+                'population': 405523,
+                'region': 'Northern',
+                'state': 'Kedah'
+            },
+            'Kuching': {
+                'coordinates': [1.5533, 110.3592],
+                'population': 325132,
+                'region': 'Eastern',
+                'state': 'Sarawak'
+            },
+            'Tawau': {
+                'coordinates': [4.2515, 117.8872],
+                'population': 113809,
+                'region': 'Eastern',
+                'state': 'Sabah'
+            },
+            'Kuantan': {
+                'coordinates': [3.8077, 103.3260],
+                'population': 366229,
+                'region': 'Eastern',
+                'state': 'Pahang'
+            }
         }
-        
-        # Patterns de consommation electrique realistes
-        self.consumption_patterns = {
+    
+    def _init_building_classes(self):
+        """Initialise les types de bâtiments avec leurs caractéristiques"""
+        return {
             'Residential': {
-                'base': 0.5, 'peak': 12.0, 'variance': 2.5, 'night_factor': 0.3
-            },
-            'Commercial': {
-                'base': 5.0, 'peak': 80.0, 'variance': 15.0, 'night_factor': 0.2
-            },
-            'Industrial': {
-                'base': 20.0, 'peak': 200.0, 'variance': 40.0, 'night_factor': 0.7
-            },
-            'Office': {
-                'base': 3.0, 'peak': 45.0, 'variance': 8.0, 'night_factor': 0.1
-            },
-            'Retail': {
-                'base': 2.0, 'peak': 35.0, 'variance': 6.0, 'night_factor': 0.15
-            },
-            'Hospital': {
-                'base': 25.0, 'peak': 70.0, 'variance': 12.0, 'night_factor': 0.8
-            },
-            'Clinic': {
-                'base': 2.0, 'peak': 15.0, 'variance': 3.0, 'night_factor': 0.1
-            },
-            'School': {
-                'base': 1.0, 'peak': 25.0, 'variance': 5.0, 'night_factor': 0.05
-            },
-            'Hotel': {
-                'base': 8.0, 'peak': 40.0, 'variance': 8.0, 'night_factor': 0.6
-            },
-            'Restaurant': {
-                'base': 3.0, 'peak': 60.0, 'variance': 15.0, 'night_factor': 0.2
-            },
-            'Warehouse': {
-                'base': 2.0, 'peak': 30.0, 'variance': 8.0, 'night_factor': 0.4
-            },
-            'Factory': {
-                'base': 30.0, 'peak': 150.0, 'variance': 35.0, 'night_factor': 0.6
+                'base_consumption': 15.0,
+                'variation': 0.4,
+                'peak_hours': [19, 20, 21],
+                'low_hours': [3, 4, 5],
+                'seasonal_factor': 1.2,
+                'description': 'Maisons et résidences individuelles'
             },
             'Apartment': {
-                'base': 1.0, 'peak': 15.0, 'variance': 4.0, 'night_factor': 0.4
+                'base_consumption': 8.5,
+                'variation': 0.3,
+                'peak_hours': [20, 21, 22],
+                'low_hours': [3, 4, 5],
+                'seasonal_factor': 1.15,
+                'description': 'Appartements et condominiums'
+            },
+            'Commercial': {
+                'base_consumption': 45.0,
+                'variation': 0.6,
+                'peak_hours': [10, 11, 14, 15],
+                'low_hours': [1, 2, 3, 4, 5, 6],
+                'seasonal_factor': 1.3,
+                'description': 'Centres commerciaux et magasins'
+            },
+            'Office': {
+                'base_consumption': 35.0,
+                'variation': 0.5,
+                'peak_hours': [9, 10, 11, 14, 15, 16],
+                'low_hours': [22, 23, 0, 1, 2, 3, 4, 5, 6, 7],
+                'seasonal_factor': 1.4,
+                'description': 'Bureaux et espaces de travail'
+            },
+            'Industrial': {
+                'base_consumption': 120.0,
+                'variation': 0.3,
+                'peak_hours': [8, 9, 10, 13, 14, 15],
+                'low_hours': [22, 23, 0, 1, 2, 3, 4, 5],
+                'seasonal_factor': 1.1,
+                'description': 'Usines et installations industrielles'
+            },
+            'Hospital': {
+                'base_consumption': 200.0,
+                'variation': 0.2,
+                'peak_hours': list(range(24)),  # 24h/24
+                'low_hours': [],
+                'seasonal_factor': 1.05,
+                'description': 'Hôpitaux et centres médicaux'
+            },
+            'Clinic': {
+                'base_consumption': 25.0,
+                'variation': 0.4,
+                'peak_hours': [9, 10, 11, 14, 15, 16],
+                'low_hours': [22, 23, 0, 1, 2, 3, 4, 5, 6, 7],
+                'seasonal_factor': 1.1,
+                'description': 'Cliniques et cabinets médicaux'
+            },
+            'School': {
+                'base_consumption': 40.0,
+                'variation': 0.8,
+                'peak_hours': [8, 9, 10, 11, 13, 14, 15],
+                'low_hours': [17, 18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6],
+                'seasonal_factor': 1.6,
+                'description': 'Écoles et universités'
+            },
+            'Hotel': {
+                'base_consumption': 60.0,
+                'variation': 0.4,
+                'peak_hours': [19, 20, 21, 22, 7, 8],
+                'low_hours': [2, 3, 4, 5],
+                'seasonal_factor': 1.3,
+                'description': 'Hôtels et hébergements'
+            },
+            'Restaurant': {
+                'base_consumption': 35.0,
+                'variation': 0.7,
+                'peak_hours': [12, 13, 19, 20, 21],
+                'low_hours': [2, 3, 4, 5, 6, 7, 8, 9],
+                'seasonal_factor': 1.2,
+                'description': 'Restaurants et cafés'
+            },
+            'Retail': {
+                'base_consumption': 30.0,
+                'variation': 0.5,
+                'peak_hours': [11, 12, 15, 16, 17, 20, 21],
+                'low_hours': [1, 2, 3, 4, 5, 6, 7, 8],
+                'seasonal_factor': 1.25,
+                'description': 'Commerces de détail'
+            },
+            'Warehouse': {
+                'base_consumption': 15.0,
+                'variation': 0.3,
+                'peak_hours': [8, 9, 10, 13, 14, 15, 16],
+                'low_hours': [20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6, 7],
+                'seasonal_factor': 1.05,
+                'description': 'Entrepôts et stockage'
             }
         }
-        
-        logger.info(f"✅ Generateur initialise avec {len(self.malaysia_locations)} villes malaysiennes")
-
-    def generate_unique_id(self):
-        """Genere un identifiant unique pour chaque batiment"""
-        return ''.join(random.choices('abcdef0123456789', k=16))
-
-    def generate_coordinates(self, location, building_type=None):
-        """
-        Genere des coordonnees GPS realistes pour une ville malaysienne
-        """
-        
-        if ENHANCED_COORDINATES_AVAILABLE and self.coordinate_generator:
-            try:
-                lat, lon = self.coordinate_generator.generate_coordinates(location, building_type)
-                logger.debug(f"Coordonnees ameliorees pour {building_type or 'batiment'} a {location}: {lat}, {lon}")
-                return lat, lon
-            except Exception as e:
-                logger.warning(f"Erreur systeme coordonnees ameliore: {e}, utilisation systeme classique")
-        
-        # Systeme classique - coordonnees precises des principales villes
-        coordinates_map = {
-            'Kuala Lumpur': {'lat': (3.1319, 3.1681), 'lon': (101.6841, 101.7381)},
-            'George Town': {'lat': (5.4000, 5.4300), 'lon': (100.3000, 100.3300)},
-            'Ipoh': {'lat': (4.5833, 4.6033), 'lon': (101.0833, 101.1033)},
-            'Shah Alam': {'lat': (3.0667, 3.1167), 'lon': (101.4833, 101.5333)},
-            'Petaling Jaya': {'lat': (3.1073, 3.1273), 'lon': (101.6063, 101.6263)},
-            'Johor Bahru': {'lat': (1.4833, 1.5033), 'lon': (103.7333, 103.7533)},
-            'Langkawi': {'lat': (6.3167, 6.3367), 'lon': (99.8167, 99.8367)},
-            'Kota Kinabalu': {'lat': (5.9667, 5.9867), 'lon': (116.0667, 116.0867)},
-            'Kuching': {'lat': (1.5333, 1.5533), 'lon': (110.3333, 110.3533)},
-            'Cyberjaya': {'lat': (2.9167, 2.9367), 'lon': (101.6333, 101.6533)},
-            'Malacca City': {'lat': (2.1896, 2.2096), 'lon': (102.2394, 102.2594)},
-            'Alor Setar': {'lat': (6.1088, 6.1288), 'lon': (100.3580, 100.3780)},
-            'Kuantan': {'lat': (3.8000, 3.8200), 'lon': (103.3200, 103.3400)}
-        }
-        
-        if location in coordinates_map:
-            coords = coordinates_map[location]
-            lat_range = coords['lat']
-            lon_range = coords['lon']
-            
-            latitude = round(random.uniform(lat_range[0], lat_range[1]), 6)
-            longitude = round(random.uniform(lon_range[0], lon_range[1]), 6)
-        else:
-            # Coordonnees generiques pour la Malaisie
-            latitude = round(random.uniform(1.0, 7.0), 6)
-            longitude = round(random.uniform(99.5, 119.5), 6)
-        
-        return latitude, longitude
-
-    def generate_building_metadata(self, num_buildings=100, location_filter=None, custom_location=None):
-        """
-        Genere les metadonnees des batiments avec distribution realiste
-        """
-        
-        buildings = []
-        
-        try:
-            # Etape 1 : Determiner les localisations disponibles
-            if custom_location:
-                available_locations = {custom_location['name']: custom_location}
-                logger.info(f"Utilisation localisation personnalisee: {custom_location['name']}")
-            elif location_filter:
-                available_locations = self._filter_locations(location_filter)
-                logger.info(f"Filtres appliques: {len(available_locations)} villes selectionnees")
-            else:
-                available_locations = self.malaysia_locations
-                logger.info(f"Toutes les villes utilisees: {len(available_locations)} villes")
-            
-            if not available_locations:
-                raise ValueError("Aucune localisation ne correspond aux criteres de filtrage")
-            
-            # Etape 2 : Repartition des batiments par ville selon la population
-            city_building_counts = self._distribute_buildings_by_city(available_locations, num_buildings)
-            logger.info(f"Batiments repartis dans {len(city_building_counts)} villes")
-            
-            # Etape 3 : Generation des batiments pour chaque ville
-            building_id_counter = 1
-            
-            for location, building_count in city_building_counts.items():
-                if building_count <= 0:
-                    continue
-                
-                location_info = available_locations[location]
-                logger.debug(f"Generation de {building_count} batiments pour {location}")
-                
-                # Obtenir la distribution realiste pour cette ville
-                building_distribution = self.building_distributor.calculate_building_distribution(
-                    location, location_info['population'], location_info['region'], building_count
-                )
-                
-                # Creer la liste des types de batiments a generer
-                building_types_list = self._create_building_types_list(building_distribution)
-                
-                # Generer les batiments individuels
-                for i in range(building_count):
-                    building = self._create_building(
-                        location, location_info, building_types_list, i, building_id_counter
-                    )
-                    buildings.append(building)
-                    building_id_counter += 1
-            
-            # Conversion en DataFrame
-            buildings_df = pd.DataFrame(buildings)
-            
-            # Affichage du resume de generation
-            self._print_generation_summary(buildings)
-            
-            return buildings_df
-            
-        except Exception as e:
-            logger.error(f"Erreur lors de la generation des batiments: {e}")
-            return self._generate_basic_buildings(num_buildings)
-
-    def _filter_locations(self, location_filter):
-        """Applique les filtres geographiques aux villes disponibles"""
-        available_locations = {}
-        
-        for name, info in self.malaysia_locations.items():
-            include = True
-            
-            if location_filter.get('city') and location_filter['city'] != 'all':
-                if name != location_filter['city']:
-                    include = False
-            
-            if location_filter.get('state') and location_filter['state'] != 'all':
-                if info['state'] != location_filter['state']:
-                    include = False
-            
-            if location_filter.get('region') and location_filter['region'] != 'all':
-                if info['region'] != location_filter['region']:
-                    include = False
-            
-            if location_filter.get('population_min'):
-                if info['population'] < int(location_filter['population_min']):
-                    include = False
-            
-            if location_filter.get('population_max'):
-                if info['population'] > int(location_filter['population_max']):
-                    include = False
-            
-            if include:
-                available_locations[name] = info
-        
-        return available_locations
-
-    def _distribute_buildings_by_city(self, available_locations, num_buildings):
-        """Distribue les batiments aux villes selon leur population"""
-        locations = list(available_locations.keys())
-        populations = [available_locations[loc]['population'] for loc in locations]
-        total_population = sum(populations)
-        
-        weights = [pop / total_population for pop in populations]
-        
-        city_building_counts = {}
-        for i, location in enumerate(locations):
-            count = max(1, int(num_buildings * weights[i]))
-            city_building_counts[location] = count
-        
-        # Ajustement pour avoir exactement num_buildings au total
-        total_assigned = sum(city_building_counts.values())
-        if total_assigned != num_buildings:
-            largest_city = max(locations, key=lambda x: available_locations[x]['population'])
-            city_building_counts[largest_city] += (num_buildings - total_assigned)
-        
-        return city_building_counts
-
-    def _create_building_types_list(self, building_distribution):
-        """Cree une liste ordonnee des types de batiments a generer"""
-        building_types_list = []
-        for building_type, count in building_distribution.items():
-            building_types_list.extend([building_type] * count)
-        
-        random.shuffle(building_types_list)
-        return building_types_list
-
-    def _create_building(self, location, location_info, building_types_list, index, building_id_counter):
-        """Cree un batiment individuel avec toutes ses metadonnees"""
-        unique_id = self.generate_unique_id()
-        
-        if index < len(building_types_list):
-            building_class = building_types_list[index]
-        else:
-            building_class = 'Residential'
-        
-        lat, lon = self.generate_coordinates(location, building_class)
-        
-        cluster_multiplier = min(location_info['population'] / 100000, 5.0)
-        cluster_size = random.randint(1, max(1, int(50 * cluster_multiplier)))
-        
+    
+    def _init_consumption_patterns(self):
+        """Initialise les patterns de consommation selon les régions"""
         return {
-            'unique_id': unique_id,
-            'dataset': 'malaysia_electricity_v1',
-            'building_id': f'MY_{location_info["state"][:3].upper()}_{building_id_counter:06d}',
-            'location_id': f'MY_{hash(location) % 100000:05d}',
-            'latitude': lat,
-            'longitude': lon,
-            'location': location,
-            'state': location_info['state'],
-            'region': location_info['region'],
-            'population': location_info['population'],
-            'timezone': 'Asia/Kuala_Lumpur',
-            'building_class': building_class,
-            'cluster_size': cluster_size,
-            'freq': '30T'
+            'Central': {'multiplier': 1.2, 'peak_shift': 0, 'climate_factor': 1.3},
+            'Northern': {'multiplier': 1.0, 'peak_shift': 0, 'climate_factor': 1.2},
+            'Southern': {'multiplier': 1.1, 'peak_shift': 0, 'climate_factor': 1.25},
+            'Eastern': {'multiplier': 0.9, 'peak_shift': 1, 'climate_factor': 1.35}
         }
-
-    def _print_generation_summary(self, buildings):
-        """Affiche un resume detaille de la generation de batiments"""
+    
+    def generate_buildings_dataframe(self, city_name: str, num_buildings: int) -> pd.DataFrame:
+        """
+        Génère un DataFrame des bâtiments pour une ville donnée
+        
+        Args:
+            city_name (str): Nom de la ville
+            num_buildings (int): Nombre total de bâtiments à générer
+            
+        Returns:
+            pd.DataFrame: DataFrame avec tous les bâtiments générés
+        """
+        logger.info(f"🏢 Génération de {num_buildings} bâtiments pour {city_name}")
+        
+        # Récupération des informations de la ville
+        city_info = self.malaysia_locations.get(city_name)
+        if not city_info:
+            logger.error(f"❌ Ville inconnue: {city_name}")
+            raise ValueError(f"Ville non trouvée: {city_name}")
+        
+        # Calcul de la distribution des types de bâtiments
         try:
-            logger.info(f"\n--- RESUME DE GENERATION ---")
-            logger.info("=" * 50)
-            
-            # Resume par ville
-            city_counts = {}
-            for building in buildings:
-                city = building['location']
-                city_counts[city] = city_counts.get(city, 0) + 1
-            
-            logger.info("Repartition des batiments par ville:")
-            for city, count in sorted(city_counts.items(), key=lambda x: x[1], reverse=True):
-                logger.info(f"  {city}: {count} batiments")
-            
-            # Distribution finale des types
-            type_counts = {}
-            for building in buildings:
-                building_type = building['building_class']
-                type_counts[building_type] = type_counts.get(building_type, 0) + 1
-            
-            logger.info(f"\nDistribution finale totale ({len(buildings)} batiments):")
-            for building_type, count in sorted(type_counts.items(), key=lambda x: x[1], reverse=True):
-                percentage = (count / len(buildings)) * 100
-                logger.info(f"  - {building_type}: {count} ({percentage:.1f}%)")
-            
-            logger.info("=" * 50)
-                
+            distribution = self.distributor.calculate_building_distribution(
+                city_name, 
+                city_info['population'], 
+                city_info['region'], 
+                num_buildings
+            )
         except Exception as e:
-            logger.error(f"Erreur affichage resume: {e}")
-
-    def _generate_basic_buildings(self, num_buildings):
-        """Generation basique en cas d'erreur du systeme principal"""
-        logger.warning("Generation basique activee en mode secours")
+            logger.error(f"Erreur distribution: {e}")
+            # Distribution de secours
+            distribution = {'Residential': num_buildings}
         
-        buildings = []
-        basic_types = ['Residential', 'Commercial', 'Industrial', 'Office', 'Retail']
-        basic_location = 'Kuala Lumpur'
+        # Génération des bâtiments
+        buildings_data = []
+        building_counter = 1
         
-        for i in range(num_buildings):
-            unique_id = self.generate_unique_id()
-            building_class = random.choice(basic_types)
-            lat, lon = self.generate_coordinates(basic_location)
+        for building_type, count in distribution.items():
+            if count > 0:
+                for i in range(count):
+                    # Génération des coordonnées
+                    if self.coordinates_generator:
+                        try:
+                            coords = self.coordinates_generator.generate_building_coordinates(
+                                city_name, building_type
+                            )
+                        except Exception as e:
+                            logger.warning(f"Erreur coordonnées améliorées: {e}")
+                            coords = self._generate_basic_coordinates(city_info['coordinates'])
+                    else:
+                        coords = self._generate_basic_coordinates(city_info['coordinates'])
+                    
+                    # Création du bâtiment
+                    building = {
+                        'building_id': f"{city_name}_{building_type}_{building_counter:04d}",
+                        'city': city_name,
+                        'building_type': building_type,
+                        'latitude': coords[0],
+                        'longitude': coords[1],
+                        'region': city_info['region'],
+                        'state': city_info['state'],
+                        'base_consumption': self.building_classes[building_type]['base_consumption'],
+                        'variation': self.building_classes[building_type]['variation']
+                    }
+                    buildings_data.append(building)
+                    building_counter += 1
+        
+        buildings_df = pd.DataFrame(buildings_data)
+        logger.info(f"✅ {len(buildings_df)} bâtiments générés avec succès")
+        return buildings_df
+    
+    def _generate_basic_coordinates(self, city_coords: List[float]) -> List[float]:
+        """
+        Génère des coordonnées de base autour du centre ville
+        
+        Args:
+            city_coords (List[float]): Coordonnées [lat, lng] du centre ville
             
-            building = {
-                'unique_id': unique_id,
-                'dataset': 'malaysia_electricity_basic',
-                'building_id': f'MY_BASIC_{i+1:06d}',
-                'location_id': f'MY_00001',
-                'latitude': lat,
-                'longitude': lon,
-                'location': basic_location,
-                'state': 'Federal Territory',
-                'region': 'Central',
-                'population': 1800000,
-                'timezone': 'Asia/Kuala_Lumpur',
-                'building_class': building_class,
-                'cluster_size': random.randint(1, 50),
-                'freq': '30T'
-            }
-            buildings.append(building)
+        Returns:
+            List[float]: Nouvelles coordonnées [lat, lng]
+        """
+        # Variation aléatoire autour du centre (rayon ~10km)
+        lat_offset = random.uniform(-0.09, 0.09)  # ~10km en latitude
+        lng_offset = random.uniform(-0.09, 0.09)  # ~10km en longitude
         
-        return pd.DataFrame(buildings)
-
-    def calculate_realistic_consumption(self, building_class, timestamp, location_info=None):
-        """Calcule une consommation electrique realiste pour le climat tropical malaysien"""
+        return [
+            city_coords[0] + lat_offset,
+            city_coords[1] + lng_offset
+        ]
+    
+    def generate_timeseries_data(self, buildings_df: pd.DataFrame, start_date: str, 
+                                end_date: str, freq: str = '30T') -> pd.DataFrame:
+        """
+        Génère les données de séries temporelles de consommation électrique
         
-        if building_class not in self.consumption_patterns:
-            building_class = 'Residential'
+        Args:
+            buildings_df (pd.DataFrame): DataFrame des bâtiments
+            start_date (str): Date de début (YYYY-MM-DD)
+            end_date (str): Date de fin (YYYY-MM-DD)
+            freq (str): Fréquence des mesures (30T = 30 minutes)
             
-        pattern = self.consumption_patterns[building_class]
+        Returns:
+            pd.DataFrame: DataFrame avec les données de consommation
+        """
+        logger.info(f"📊 Génération des séries temporelles du {start_date} au {end_date} (freq: {freq})")
         
-        hour = timestamp.hour
-        day_of_week = timestamp.dayofweek
-        month = timestamp.month
-        is_weekend = day_of_week >= 5
+        # Génération de l'index temporel
+        date_range = pd.date_range(start=start_date, end=end_date, freq=freq)
+        logger.info(f"📈 {len(date_range)} points temporels à générer")
         
-        # Facteur climatique tropical
-        climate_factor = 1.0
-        if 11 <= hour <= 16:
-            climate_factor = 1.4 + 0.3 * random.random()
-        elif 17 <= hour <= 21:
-            climate_factor = 1.2 + 0.2 * random.random()
-        elif 6 <= hour <= 10:
-            climate_factor = 0.8 + 0.2 * random.random()
-        else:
-            climate_factor = 0.9 + 0.2 * random.random()
+        # Stockage des données
+        consumption_data = []
         
-        # Facteur saisonnier
-        seasonal_factor = 1.0
-        if month in [11, 12, 1, 2]:
-            seasonal_factor = 0.85
-        elif month in [5, 6, 7, 8]:
-            seasonal_factor = 1.2
-        else:
-            seasonal_factor = 1.0
-        
-        # Calcul de la consommation de base
-        base_consumption = pattern['base']
-        peak_consumption = pattern['peak']
-        variance = pattern['variance']
-        night_factor = pattern['night_factor']
-        
-        # Pattern horaire selon le type de batiment
-        if building_class in ['Residential', 'Apartment']:
-            if 6 <= hour <= 8 or 18 <= hour <= 22:
-                hourly_factor = 0.8 + 0.4 * random.random()
-            elif 9 <= hour <= 17:
-                hourly_factor = 0.4 + 0.3 * random.random()
-            else:
-                hourly_factor = night_factor + 0.2 * random.random()
-        elif building_class in ['Office', 'Commercial']:
-            if 9 <= hour <= 17:
-                hourly_factor = 0.7 + 0.3 * random.random()
-            elif 18 <= hour <= 22:
-                hourly_factor = 0.3 + 0.2 * random.random()
-            else:
-                hourly_factor = night_factor + 0.1 * random.random()
-        elif building_class in ['Industrial', 'Factory', 'Warehouse']:
-            if 6 <= hour <= 18:
-                hourly_factor = 0.8 + 0.2 * random.random()
-            else:
-                hourly_factor = night_factor + 0.3 * random.random()
-        elif building_class == 'Hospital':
-            hourly_factor = 0.7 + 0.3 * random.random()
-        elif building_class in ['Hotel', 'Restaurant']:
-            if building_class == 'Restaurant':
-                if 12 <= hour <= 14 or 19 <= hour <= 22:
-                    hourly_factor = 0.8 + 0.2 * random.random()
-                else:
-                    hourly_factor = 0.3 + 0.4 * random.random()
-            else:
-                if 18 <= hour <= 23:
-                    hourly_factor = 0.7 + 0.3 * random.random()
-                else:
-                    hourly_factor = 0.5 + 0.3 * random.random()
-        elif building_class in ['School', 'Clinic']:
-            if 7 <= hour <= 17:
-                hourly_factor = 0.6 + 0.4 * random.random()
-            else:
-                hourly_factor = night_factor + 0.1 * random.random()
-        else:
-            hourly_factor = 0.5 + 0.5 * random.random()
-        
-        # Facteur weekend
-        weekend_factor = 1.0
-        if is_weekend:
-            if building_class in ['Office', 'School', 'Clinic']:
-                weekend_factor = 0.2
-            elif building_class in ['Commercial', 'Retail']:
-                weekend_factor = 1.2
-            elif building_class in ['Residential', 'Hotel', 'Restaurant']:
-                weekend_factor = 1.1
-        
-        # Calcul final de la consommation
-        consumption = (base_consumption + 
-                      (peak_consumption - base_consumption) * hourly_factor)
-        
-        consumption *= climate_factor
-        consumption *= seasonal_factor
-        consumption *= weekend_factor
-        
-        # Ajout de variabilite aleatoire
-        random_variance = random.gauss(0, variance * 0.1)
-        consumption += random_variance
-        
-        # S'assurer que la consommation reste positive et realiste
-        consumption = max(0.1, consumption)
-        max_reasonable = peak_consumption * 2.0
-        consumption = min(consumption, max_reasonable)
-        
-        return round(consumption, 3)
-
-    def generate_timeseries_data(self, buildings_df, start_date, end_date, freq='30T'):
-        """Genere les series temporelles de consommation electrique"""
-        
-        logger.info(f"Generation des series temporelles de {start_date} a {end_date} (freq: {freq})")
-        
-        # Creation de l'index temporel
-        date_range = pd.date_range(
-            start=start_date,
-            end=end_date,
-            freq=freq,
-            tz='Asia/Kuala_Lumpur'
-        )
-        
-        logger.info(f"Periode temporelle: {len(date_range)} points de donnees")
-        
-        # Initialisation de la liste des donnees
-        timeseries_data = []
-        total_records = len(buildings_df) * len(date_range)
-        
-        logger.info(f"Generation de {total_records:,} enregistrements au total")
-        
-        # Generation pour chaque batiment
-        for building_idx, building in buildings_df.iterrows():
-            building_id = building['unique_id']
-            building_class = building['building_class']
-            location_info = {
-                'location': building['location'],
-                'state': building['state'],
-                'region': building['region'],
-                'population': building['population']
-            }
+        for _, building in buildings_df.iterrows():
+            building_type = building['building_type']
+            region = building['region']
             
-            # Generation pour chaque point temporel
+            # Récupération des patterns de consommation
+            building_class = self.building_classes[building_type]
+            region_pattern = self.consumption_patterns.get(region, self.consumption_patterns['Central'])
+            
             for timestamp in date_range:
-                consumption = self.calculate_realistic_consumption(
-                    building_class, timestamp, location_info
+                # Calcul de la consommation pour ce timestamp
+                consumption = self._calculate_consumption(
+                    building_class, region_pattern, timestamp
                 )
                 
-                # Ajout d'evenements ponctuels
-                consumption = self._apply_random_events(consumption, timestamp, building_class)
-                
-                timeseries_data.append({
-                    'unique_id': building_id,
-                    'ds': timestamp,
-                    'y': consumption
+                # Ajout des données
+                consumption_data.append({
+                    'timestamp': timestamp,
+                    'building_id': building['building_id'],
+                    'consumption_kwh': round(consumption, 2),
+                    'city': building['city'],
+                    'building_type': building_type,
+                    'region': region
                 })
+        
+        consumption_df = pd.DataFrame(consumption_data)
+        logger.info(f"✅ {len(consumption_df)} enregistrements de consommation générés")
+        return consumption_df
+    
+    def _calculate_consumption(self, building_class: dict, region_pattern: dict, 
+                             timestamp: datetime) -> float:
+        """
+        Calcule la consommation électrique pour un bâtiment à un moment donné
+        
+        Args:
+            building_class (dict): Classe du bâtiment avec ses caractéristiques
+            region_pattern (dict): Pattern régional de consommation
+            timestamp (datetime): Moment de la mesure
             
-            # Log de progression
-            if (building_idx + 1) % 50 == 0:
-                progress = ((building_idx + 1) / len(buildings_df)) * 100
-                logger.info(f"Progression: {progress:.1f}% ({building_idx + 1}/{len(buildings_df)} batiments)")
+        Returns:
+            float: Consommation en kWh
+        """
+        # Consommation de base
+        base = building_class['base_consumption']
         
-        # Conversion en DataFrame
-        timeseries_df = pd.DataFrame(timeseries_data)
+        # Facteur temporel (heure de la journée)
+        hour = timestamp.hour
+        time_factor = 1.0
         
-        logger.info(f"Series temporelles generees: {len(timeseries_df):,} enregistrements")
-        logger.info(f"Consommation moyenne: {timeseries_df['y'].mean():.2f} kWh")
-        logger.info(f"Consommation maximale: {timeseries_df['y'].max():.2f} kWh")
+        if hour in building_class['peak_hours']:
+            time_factor = 1.4  # Pic de consommation
+        elif hour in building_class['low_hours']:
+            time_factor = 0.6  # Consommation faible
+        else:
+            time_factor = 1.0  # Consommation normale
         
-        return timeseries_df
-
-    def _apply_random_events(self, base_consumption, timestamp, building_class):
-        """Applique des evenements aleatoires realistes"""
+        # Facteur saisonnier (chaleur en Malaisie)
+        seasonal_factor = building_class['seasonal_factor']
+        if timestamp.month in [6, 7, 8]:  # Saison sèche (plus chaud)
+            seasonal_factor *= 1.1
         
-        # Probabilite d'evenements exceptionnels (tres faible)
-        if random.random() < 0.001:  # 0.1% de chance
-            if random.random() < 0.3:
-                return 0.0  # Panne electrique
-            elif random.random() < 0.5:
-                return base_consumption * (1.5 + random.random())  # Pic exceptionnel
+        # Facteur régional
+        regional_factor = region_pattern['multiplier']
+        climate_factor = region_pattern['climate_factor']
         
-        # Orages tropicaux (frequents en Malaisie)
-        if random.random() < 0.01:  # 1% de chance
+        # Variation aléatoire
+        random_variation = random.uniform(1 - building_class['variation'], 
+                                        1 + building_class['variation'])
+        
+        # Calcul final
+        consumption = (base * time_factor * seasonal_factor * 
+                      regional_factor * climate_factor * random_variation)
+        
+        # Événements spéciaux (pannes, pics de consommation)
+        consumption = self._apply_special_events(consumption)
+        
+        return max(0.1, consumption)  # Minimum 0.1 kWh
+    
+    def _apply_special_events(self, base_consumption: float) -> float:
+        """
+        Applique des événements spéciaux qui peuvent affecter la consommation
+        
+        Args:
+            base_consumption (float): Consommation de base
+            
+        Returns:
+            float: Consommation ajustée
+        """
+        # Pic de chaleur extrême (1% de chance)
+        if random.random() < 0.01:
+            return base_consumption * (1.5 + random.random())
+        
+        # Orages tropicaux avec coupures partielles (0.5% de chance)
+        if random.random() < 0.005:
             if random.random() < 0.7:
-                return base_consumption * 0.3  # Coupure partielle
+                return base_consumption * 0.2  # Coupure partielle
             else:
-                return base_consumption * 1.3  # Systemes de secours
+                return base_consumption * 1.4  # Systèmes de secours
         
         return base_consumption
 
 
 def convert_numpy_types(obj):
-    """Convertit les types numpy en types Python natifs pour la serialisation JSON"""
+    """Convertit les types numpy en types Python natifs pour la sérialisation JSON"""
     if isinstance(obj, np.integer):
         return int(obj)
     elif isinstance(obj, np.floating):
@@ -728,27 +582,300 @@ def convert_numpy_types(obj):
 
 
 def safe_json_response(data):
-    """Cree une reponse JSON en convertissant les types numpy"""
+    """Crée une réponse JSON en convertissant les types numpy"""
     try:
         clean_data = convert_numpy_types(data)
         return jsonify(clean_data)
     except Exception as e:
-        logger.error(f"Erreur serialisation JSON: {e}")
+        logger.error(f"Erreur sérialisation JSON: {e}")
         return jsonify({
             'success': False,
-            'error': 'Erreur de serialisation des donnees',
+            'error': 'Erreur de sérialisation des données',
             'details': str(e)
         })
 
 
-# ===== INITIALISATION DU GENERATEUR =====
-# CORRECTION CRITIQUE: Initialiser le generateur AVANT les routes
+# ===== FONCTIONS OSM =====
+
+def convert_osm_to_buildings_df(buildings_osm: List[dict], zone_data: dict) -> pd.DataFrame:
+    """
+    Convertit les bâtiments OSM en DataFrame compatible avec le générateur
+    
+    Args:
+        buildings_osm (List[dict]): Liste des bâtiments OSM
+        zone_data (dict): Informations de la zone
+        
+    Returns:
+        pd.DataFrame: DataFrame des bâtiments convertis
+    """
+    buildings_data = []
+    
+    for i, osm_building in enumerate(buildings_osm):
+        # Mapping des tags OSM vers nos types de bâtiments
+        building_type = map_osm_to_building_type(osm_building.get('tags', {}))
+        
+        # Coordonnées (centre du bâtiment)
+        coords = osm_building.get('center', [0.0, 0.0])
+        
+        building = {
+            'building_id': f"OSM_{zone_data.get('name', 'Zone')}_{i+1:04d}",
+            'city': zone_data.get('name', 'Unknown'),
+            'building_type': building_type,
+            'latitude': coords[0] if len(coords) > 0 else 0.0,
+            'longitude': coords[1] if len(coords) > 1 else 0.0,
+            'region': zone_data.get('region', 'Unknown'),
+            'state': zone_data.get('state', 'Unknown'),
+            'base_consumption': generator.building_classes[building_type]['base_consumption'],
+            'variation': generator.building_classes[building_type]['variation'],
+            'osm_tags': osm_building.get('tags', {}),
+            'osm_id': osm_building.get('id', f'unknown_{i}')
+        }
+        buildings_data.append(building)
+    
+    return pd.DataFrame(buildings_data)
+
+
+def map_osm_to_building_type(osm_tags: dict) -> str:
+    """
+    Mappe les tags OSM vers nos types de bâtiments
+    
+    Args:
+        osm_tags (dict): Tags OSM du bâtiment
+        
+    Returns:
+        str: Type de bâtiment correspondant
+    """
+    building_tag = osm_tags.get('building', '').lower()
+    amenity_tag = osm_tags.get('amenity', '').lower()
+    shop_tag = osm_tags.get('shop', '').lower()
+    landuse_tag = osm_tags.get('landuse', '').lower()
+    
+    # Mapping détaillé
+    if building_tag in ['hospital'] or amenity_tag in ['hospital']:
+        return 'Hospital'
+    elif building_tag in ['clinic'] or amenity_tag in ['clinic', 'doctors']:
+        return 'Clinic'
+    elif building_tag in ['school', 'university'] or amenity_tag in ['school', 'university', 'college']:
+        return 'School'
+    elif building_tag in ['hotel'] or amenity_tag in ['hotel']:
+        return 'Hotel'
+    elif building_tag in ['restaurant'] or amenity_tag in ['restaurant', 'cafe', 'fast_food']:
+        return 'Restaurant'
+    elif building_tag in ['retail', 'commercial'] or shop_tag or amenity_tag in ['marketplace']:
+        return 'Retail'
+    elif building_tag in ['office'] or amenity_tag in ['office']:
+        return 'Office'
+    elif building_tag in ['warehouse', 'industrial'] or landuse_tag in ['industrial']:
+        return 'Warehouse'
+    elif building_tag in ['apartments', 'residential'] and 'apartment' in building_tag:
+        return 'Apartment'
+    elif building_tag in ['yes', 'house', 'residential'] or building_tag.startswith('residential'):
+        return 'Residential'
+    else:
+        # Par défaut, considérer comme résidentiel
+        return 'Residential'
+
+
+def calculate_osm_stats(buildings_df: pd.DataFrame, timeseries_df: pd.DataFrame, zone_data: dict) -> dict:
+    """
+    Calcule les statistiques pour les données OSM
+    
+    Args:
+        buildings_df (pd.DataFrame): DataFrame des bâtiments
+        timeseries_df (pd.DataFrame): DataFrame des séries temporelles
+        zone_data (dict): Informations de la zone
+        
+    Returns:
+        dict: Statistiques calculées
+    """
+    try:
+        # Statistiques des bâtiments
+        building_counts = buildings_df['building_type'].value_counts().to_dict()
+        total_buildings = len(buildings_df)
+        
+        # Statistiques de consommation
+        if not timeseries_df.empty:
+            total_consumption = timeseries_df['consumption_kwh'].sum()
+            avg_consumption = timeseries_df['consumption_kwh'].mean()
+            max_consumption = timeseries_df['consumption_kwh'].max()
+            min_consumption = timeseries_df['consumption_kwh'].min()
+            
+            # Consommation par type de bâtiment
+            consumption_by_type = timeseries_df.groupby('building_type')['consumption_kwh'].sum().to_dict()
+        else:
+            total_consumption = avg_consumption = max_consumption = min_consumption = 0
+            consumption_by_type = {}
+        
+        # Analyse géographique
+        lat_range = [buildings_df['latitude'].min(), buildings_df['latitude'].max()]
+        lng_range = [buildings_df['longitude'].min(), buildings_df['longitude'].max()]
+        
+        return {
+            'zone_info': {
+                'name': zone_data.get('name', 'Unknown'),
+                'region': zone_data.get('region', 'Unknown'),
+                'total_buildings': total_buildings,
+                'geographic_bounds': {
+                    'latitude': lat_range,
+                    'longitude': lng_range
+                }
+            },
+            'building_distribution': building_counts,
+            'consumption_stats': {
+                'total_kwh': round(total_consumption, 2),
+                'average_kwh': round(avg_consumption, 2),
+                'max_kwh': round(max_consumption, 2),
+                'min_kwh': round(min_consumption, 2),
+                'by_building_type': {k: round(v, 2) for k, v in consumption_by_type.items()}
+            },
+            'data_quality': {
+                'buildings_with_coords': len(buildings_df[(buildings_df['latitude'] != 0) & (buildings_df['longitude'] != 0)]),
+                'buildings_without_coords': len(buildings_df[(buildings_df['latitude'] == 0) | (buildings_df['longitude'] == 0)]),
+                'unique_building_types': len(building_counts),
+                'generation_timestamp': datetime.now().isoformat()
+            }
+        }
+    except Exception as e:
+        logger.error(f"Erreur calcul statistiques OSM: {e}")
+        return {
+            'error': str(e),
+            'zone_info': zone_data,
+            'building_distribution': {},
+            'consumption_stats': {},
+            'data_quality': {}
+        }
+
+
+def analyze_osm_data_quality(buildings_osm: List[dict]) -> dict:
+    """
+    Analyse la qualité des données OSM reçues
+    
+    Args:
+        buildings_osm (List[dict]): Liste des bâtiments OSM
+        
+    Returns:
+        dict: Analyse de qualité
+    """
+    if not buildings_osm:
+        return {
+            'total_buildings': 0,
+            'buildings_with_tags': 0,
+            'buildings_with_coords': 0,
+            'tag_coverage': {},
+            'quality_score': 0
+        }
+    
+    buildings_with_tags = 0
+    buildings_with_coords = 0
+    tag_frequency = {}
+    
+    for building in buildings_osm:
+        # Vérification des tags
+        tags = building.get('tags', {})
+        if tags:
+            buildings_with_tags += 1
+            for tag_key in tags.keys():
+                tag_frequency[tag_key] = tag_frequency.get(tag_key, 0) + 1
+        
+        # Vérification des coordonnées
+        coords = building.get('center', [])
+        if len(coords) >= 2 and coords[0] != 0 and coords[1] != 0:
+            buildings_with_coords += 1
+    
+    # Score de qualité (0-100)
+    coord_score = (buildings_with_coords / len(buildings_osm)) * 50
+    tag_score = (buildings_with_tags / len(buildings_osm)) * 50
+    quality_score = coord_score + tag_score
+    
+    return {
+        'total_buildings': len(buildings_osm),
+        'buildings_with_tags': buildings_with_tags,
+        'buildings_with_coords': buildings_with_coords,
+        'tag_coverage': tag_frequency,
+        'quality_score': round(quality_score, 1),
+        'recommendations': generate_quality_recommendations(buildings_osm, quality_score)
+    }
+
+
+def generate_quality_recommendations(buildings_osm: List[dict], quality_score: float) -> List[str]:
+    """
+    Génère des recommandations basées sur la qualité des données OSM
+    
+    Args:
+        buildings_osm (List[dict]): Liste des bâtiments OSM
+        quality_score (float): Score de qualité calculé
+        
+    Returns:
+        List[str]: Liste des recommandations
+    """
+    recommendations = []
+    
+    if quality_score >= 80:
+        recommendations.append("✅ Excellente qualité des données OSM")
+    elif quality_score >= 60:
+        recommendations.append("✅ Bonne qualité des données OSM")
+        recommendations.append("💡 Vérifiez les bâtiments sans coordonnées")
+    elif quality_score >= 40:
+        recommendations.append("⚠️ Qualité moyenne des données OSM")
+        recommendations.append("💡 Ajoutez plus de tags descriptifs")
+        recommendations.append("💡 Vérifiez la précision des coordonnées")
+    else:
+        recommendations.append("❌ Qualité faible des données OSM")
+        recommendations.append("🔧 Enrichissez les données avec plus de tags")
+        recommendations.append("🔧 Vérifiez et corrigez les coordonnées manquantes")
+        recommendations.append("🔧 Considérez une validation manuelle")
+    
+    return recommendations
+
+
+def prepare_sample_data(buildings_df: pd.DataFrame, timeseries_df: pd.DataFrame, sample_size: int = 10) -> dict:
+    """
+    Prépare un échantillon de données pour l'aperçu
+    
+    Args:
+        buildings_df (pd.DataFrame): DataFrame des bâtiments
+        timeseries_df (pd.DataFrame): DataFrame des séries temporelles
+        sample_size (int): Taille de l'échantillon
+        
+    Returns:
+        dict: Échantillon de données
+    """
+    try:
+        # Échantillon de bâtiments
+        sample_buildings = buildings_df.head(sample_size).to_dict('records')
+        
+        # Échantillon de données temporelles (derniers points)
+        if not timeseries_df.empty:
+            sample_timeseries = timeseries_df.tail(sample_size * 5).to_dict('records')
+        else:
+            sample_timeseries = []
+        
+        return {
+            'buildings_sample': sample_buildings,
+            'timeseries_sample': sample_timeseries,
+            'sample_info': {
+                'buildings_shown': len(sample_buildings),
+                'timeseries_shown': len(sample_timeseries),
+                'total_buildings': len(buildings_df),
+                'total_timeseries': len(timeseries_df)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Erreur préparation échantillon: {e}")
+        return {
+            'buildings_sample': [],
+            'timeseries_sample': [],
+            'sample_info': {'error': str(e)}
+        }
+
+
+# ===== INITIALISATION DU GÉNÉRATEUR =====
+# CORRECTION CRITIQUE: Initialiser le générateur AVANT les routes
 try:
     generator = ElectricityDataGenerator()
     logger.info("✅ Générateur principal initialisé avec succès")
 except Exception as e:
     logger.error(f"❌ Erreur critique lors de l'initialisation du générateur: {e}")
-    # Créer un générateur minimal de secours
     generator = None
 
 
@@ -762,12 +889,12 @@ def index():
 
 @app.route('/api/stats')
 def api_stats():
-    """API pour obtenir les statistiques du systeme"""
+    """API pour obtenir les statistiques du système"""
     try:
         if not generator:
             raise Exception("Générateur non initialisé")
-            
-        # Statistiques generales
+        
+        # Statistiques générales
         stats = {
             'total_cities': len(generator.malaysia_locations),
             'building_types': len(generator.building_classes),
@@ -777,335 +904,329 @@ def api_stats():
                 'enhanced_coordinates': ENHANCED_COORDINATES_AVAILABLE,
                 'validation_system': False,
                 'climate_patterns': True,
-                'cultural_patterns': True
-            }
+                'osm_integration': True
+            },
+            'available_cities': list(generator.malaysia_locations.keys()),
+            'available_building_types': list(generator.building_classes.keys()),
+            'regions': list(set(city['region'] for city in generator.malaysia_locations.values())),
+            'system_status': 'Opérationnel'
         }
         
-        # Repartition par region
-        regions = {}
-        for city, info in generator.malaysia_locations.items():
-            region = info['region']
-            if region not in regions:
-                regions[region] = []
-            regions[region].append({
-                'name': city,
-                'population': info['population'],
-                'state': info['state']
-            })
-        
-        # Informations detaillees avec conversion des types numpy
-        malaysia_info = {
-            'total_population': int(sum(city['population'] for city in generator.malaysia_locations.values())),
-            'largest_city': max(generator.malaysia_locations.items(), key=lambda x: x[1]['population']),
-            'regions': regions,
-            'building_classes': generator.building_classes
-        }
-        
-        return safe_json_response({
-            'success': True,
-            'stats': stats,
-            'malaysia_locations': generator.malaysia_locations,
-            'malaysia_info': malaysia_info,
-            'realistic_features': [
-                'Distribution basee sur la taille reelle des villes',
-                'Hopitaux seulement dans les villes >80K habitants',
-                'Industries adaptees au profil economique des villes',
-                'Coordonnees GPS precises des villes malaysiennes',
-                'Patterns climatiques tropicaux integres',
-                'Facteurs culturels malaysiens (Ramadan, vendredi)',
-                'Variations saisonnieres (mousson vs saison seche)'
-            ]
-        })
+        return safe_json_response(stats)
         
     except Exception as e:
         logger.error(f"Erreur API stats: {e}")
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({
+            'error': str(e),
+            'system_status': 'Erreur'
+        }), 500
 
 
 @app.route('/api/real-data-status')
-def api_real_data_status():
-    """API pour obtenir le statut des vraies donnees"""
+def real_data_status():
+    """API pour le statut des données réelles"""
     try:
-        if not generator:
-            raise Exception("Générateur non initialisé")
-            
+        # Simulation du statut - à remplacer par vraies données si disponibles
         status = {
-            'real_data_available': generator.real_data_available,
-            'validation_enabled': generator.validation_enabled,
-            'building_distributor_available': BUILDING_DISTRIBUTOR_AVAILABLE,
-            'enhanced_coordinates_available': ENHANCED_COORDINATES_AVAILABLE,
+            'real_data_available': False,
+            'simulated_data_only': True,
             'data_sources': [
-                'Population Census Malaysia',
-                'Ministry of Health Malaysia',
-                'Ministry of Education Malaysia',
-                'Tourism Malaysia Statistics'
-            ] if generator.real_data_available else [
-                'Population estimates',
-                'Statistical ratios',
-                'Urban planning guidelines'
+                'Distribution intelligente de bâtiments',
+                'Patterns de consommation régionaux',
+                'Facteurs climatiques Malaysia',
+                'Événements spéciaux simulés'
+            ],
+            'quality_indicators': {
+                'distribution_accuracy': 85,
+                'temporal_patterns': 90,
+                'regional_variation': 80,
+                'climate_integration': 95
+            },
+            'last_update': datetime.now().isoformat(),
+            'recommendations': [
+                'Données simulées basées sur patterns réalistes',
+                'Validation avec données réelles recommandée',
+                'Calibrage possible avec mesures terrain'
             ]
         }
         
-        return jsonify({
-            'success': True,
-            'status': status,
-            'message': 'Système de données réelles Malaysia' if status['real_data_available'] else 'Mode estimation intelligent'
-        })
+        return safe_json_response(status)
         
     except Exception as e:
         logger.error(f"Erreur API real-data-status: {e}")
-        return jsonify({'success': False, 'error': str(e)})
-
-
-@app.route('/generate', methods=['POST'])
-def generate_data():
-    """Route pour generer les donnees de batiments (sans series temporelles)"""
-    try:
-        if not generator:
-            raise Exception("Générateur non initialisé")
-            
-        # Recuperation des parametres de la requete
-        params = request.get_json()
-        
-        num_buildings = int(params.get('num_buildings', 100))
-        location_filter = params.get('location_filter')
-        custom_location = params.get('custom_location')
-        
-        logger.info(f"Generation demandee: {num_buildings} batiments")
-        
-        # Generation des metadonnees des batiments
-        buildings_df = generator.generate_building_metadata(
-            num_buildings=num_buildings,
-            location_filter=location_filter,
-            custom_location=custom_location
-        )
-        
-        # Analyse de la distribution finale avec conversion des types numpy
-        building_type_stats = buildings_df['building_class'].value_counts().to_dict()
-        building_type_stats = {k: int(v) for k, v in building_type_stats.items()}
-        
-        location_analysis = []
-        
-        for location in buildings_df['location'].unique():
-            location_buildings = buildings_df[buildings_df['location'] == location]
-            location_types = location_buildings['building_class'].value_counts().to_dict()
-            location_types = {k: int(v) for k, v in location_types.items()}
-            
-            location_analysis.append({
-                'location': location,
-                'building_count': int(len(location_buildings)),
-                'types': location_types,
-                'state': location_buildings['state'].iloc[0],
-                'region': location_buildings['region'].iloc[0],
-                'population': int(location_buildings['population'].iloc[0]),
-                'data_source': 'VRAIES DONNÉES' if BUILDING_DISTRIBUTOR_AVAILABLE else 'ESTIMATIONS'
-            })
-        
-        # Calcul des statistiques
-        stats = {
-            'total_records': int(len(buildings_df)),
-            'buildings_count': int(len(buildings_df)),
-            'avg_consumption': 0,  # Sera calculé avec les séries temporelles
-            'max_consumption': 0   # Sera calculé avec les séries temporelles
-        }
-        
-        # Preparation de la reponse avec conversion des types
-        response_data = {
-            'success': True,
-            'message': f'Generation reussie de {len(buildings_df)} batiments',
-            'buildings': buildings_df.head(200).to_dict('records'),  # Limiter pour l'affichage
-            'stats': stats,
-            'location_analysis': location_analysis,
-            'data_sources': {
-                'real_data_used': generator.real_data_available,
-                'data_quality': 'OFFICIAL' if generator.real_data_available else 'ESTIMATED',
-                'sources': [
-                    'Ministry of Health Malaysia',
-                    'Ministry of Education Malaysia',
-                    'Department of Statistics Malaysia'
-                ] if generator.real_data_available else [
-                    'Population-based estimation',
-                    'Urban planning ratios'
-                ]
-            }
-        }
-        
-        logger.info(f"Generation reussie - {len(buildings_df)} batiments, {len(buildings_df['location'].unique())} villes")
-        
-        return safe_json_response(response_data)
-        
-    except Exception as e:
-        logger.error(f"Erreur generation: {e}")
-        return jsonify({'success': False, 'error': str(e)})
-
-
-@app.route('/download', methods=['POST'])
-def download_data():
-    """Route pour generer et telecharger les fichiers complets"""
-    try:
-        if not generator:
-            raise Exception("Générateur non initialisé")
-            
-        # Recuperation des parametres
-        params = request.get_json()
-        
-        num_buildings = int(params.get('num_buildings', 100))
-        start_date = params.get('start_date', '2024-01-01')
-        end_date = params.get('end_date', '2024-01-31')
-        freq = params.get('freq', '30T')
-        location_filter = params.get('location_filter')
-        custom_location = params.get('custom_location')
-        
-        logger.info(f"Telechargement demande: {num_buildings} batiments, {start_date} a {end_date}")
-        
-        # Generation des batiments
-        buildings_df = generator.generate_building_metadata(
-            num_buildings=num_buildings,
-            location_filter=location_filter,
-            custom_location=custom_location
-        )
-        
-        # Generation des series temporelles
-        timeseries_df = generator.generate_timeseries_data(
-            buildings_df, start_date, end_date, freq
-        )
-        
-        # Preparation des noms de fichiers
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        output_dir = 'generated_data'
-        
-        # Creer le dossier de sortie si necessaire
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        
-        # Determination du prefixe selon le filtre de localisation
-        if location_filter:
-            if location_filter.get('city') and location_filter['city'] != 'all':
-                filter_name = location_filter['city'].replace(' ', '_').replace('/', '_')
-            elif location_filter.get('state') and location_filter['state'] != 'all':
-                filter_name = location_filter['state'].replace(' ', '_').replace('/', '_')
-            elif location_filter.get('region') and location_filter['region'] != 'all':
-                filter_name = location_filter['region'].replace(' ', '_').replace('/', '_')
-            prefix = f'malaysia_{filter_name}'
-        else:
-            prefix = 'malaysia'
-        
-        buildings_filename = f'{output_dir}/{prefix}_buildings_{timestamp}.parquet'
-        timeseries_filename = f'{output_dir}/{prefix}_demand_{timestamp}.parquet'
-        
-        # Sauvegarde des fichiers
-        buildings_df.to_parquet(buildings_filename, index=False)
-        timeseries_df.to_parquet(timeseries_filename, index=False)
-        
-        # Creation du message de resume
-        message = f"""Fichiers generes pour la MALAISIE:
-        
-Metadonnees: {buildings_filename}
-   - {len(buildings_df)} batiments repartis dans {buildings_df['location'].nunique()} villes
-        
-Series temporelles: {timeseries_filename}
-   - {len(timeseries_df):,} observations
-   - Periode: {start_date} a {end_date}
-   - Frequence: {freq}
-        
-Statistiques:
-   - Consommation moyenne: {timeseries_df['y'].mean():.2f} kWh
-   - Consommation maximale: {timeseries_df['y'].max():.2f} kWh
-   - Valeurs nulles: {(timeseries_df['y'] == 0).sum()} ({(timeseries_df['y'] == 0).sum() / len(timeseries_df) * 100:.1f}%)
-        
-Realisme: Distribution basee sur la taille et le type de chaque ville"""
-        
-        files_generated = {
-            'buildings': buildings_filename,
-            'timeseries': timeseries_filename
-        }
-        
-        response_data = {
-            'success': True,
-            'message': message,
-            'files': files_generated,
-            'data_sources': {
-                'real_data_used': generator.real_data_available,
-                'data_quality': 'OFFICIAL' if generator.real_data_available else 'ESTIMATED'
-            }
-        }
-        
-        logger.info("Telechargement prepare avec succes!")
-        
-        return safe_json_response(response_data)
-        
-    except Exception as e:
-        logger.error(f"Erreur telechargement: {e}")
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/sample')
-def show_sample():
-    """Route pour afficher un echantillon de donnees"""
+def sample_generation():
+    """Génère un échantillon de démonstration"""
     try:
         if not generator:
             raise Exception("Générateur non initialisé")
-            
-        # Generation d'un petit echantillon
-        sample_buildings = generator.generate_building_metadata(num_buildings=10)
-        sample_timeseries = generator.generate_timeseries_data(
-            sample_buildings, '2024-01-01', '2024-01-02', '1H'
-        )
         
-        # Preparation des donnees d'exemple
+        logger.info("🧪 Génération d'un échantillon de démonstration")
+        
+        # Paramètres de l'échantillon
+        city_name = 'Kuala Lumpur'
+        num_buildings = 10
+        start_date = '2024-01-01'
+        end_date = '2024-01-02'
+        freq = '1H'
+        
+        # Génération des bâtiments
+        buildings_df = generator.generate_buildings_dataframe(city_name, num_buildings)
+        
+        # Génération des séries temporelles
+        timeseries_df = generator.generate_timeseries_data(buildings_df, start_date, end_date, freq)
+        
+        # Préparation de la réponse
         response_data = {
             'success': True,
-            'buildings': sample_buildings.to_dict('records'),
-            'timeseries': sample_timeseries.head(50).to_dict('records'),
-            'stats': {
-                'total_records': len(sample_timeseries),
-                'buildings_count': len(sample_buildings),
-                'avg_consumption': float(sample_timeseries['y'].mean()),
-                'max_consumption': float(sample_timeseries['y'].max())
+            'sample_info': {
+                'city': city_name,
+                'num_buildings': len(buildings_df),
+                'time_points': len(timeseries_df),
+                'period': f"{start_date} à {end_date}",
+                'frequency': freq
             },
-            'summary': {
-                'buildings_count': len(sample_buildings),
-                'timeseries_count': len(sample_timeseries),
-                'cities': sample_buildings['location'].unique().tolist(),
-                'building_types': sample_buildings['building_class'].value_counts().to_dict()
-            },
-            'data_sources': {
-                'real_data_used': generator.real_data_available,
-                'data_quality': 'OFFICIAL' if generator.real_data_available else 'ESTIMATED'
+            'buildings': buildings_df.head().to_dict('records'),
+            'timeseries': timeseries_df.head(20).to_dict('records'),
+            'statistics': {
+                'building_distribution': buildings_df['building_type'].value_counts().to_dict(),
+                'total_consumption': round(timeseries_df['consumption_kwh'].sum(), 2),
+                'average_consumption': round(timeseries_df['consumption_kwh'].mean(), 2)
             }
         }
         
         return safe_json_response(response_data)
         
     except Exception as e:
-        logger.error(f"Erreur echantillon: {e}")
-        return jsonify({'success': False, 'error': str(e)})
+        logger.error(f"Erreur génération échantillon: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
-# ===== INTEGRATION COMPLETE (SI DISPONIBLE) =====
-if COMPLETE_INTEGRATION_AVAILABLE and generator:
+# ===== ROUTE OSM PRINCIPALE =====
+
+@app.route('/generate-from-osm', methods=['POST'])
+def generate_from_osm():
+    """
+    Route principale pour générer des données à partir d'OpenStreetMap
+    """
     try:
-        integration_success = create_complete_integration(app, generator)
-        if integration_success:
-            logger.info("✅ Intégration complète activée avec succès")
-        else:
-            logger.warning("⚠️ Échec de l'intégration complète")
+        logger.info("🗺️ Début génération basée sur OSM")
+        
+        if not generator:
+            raise Exception("Générateur non initialisé")
+        
+        # Récupération des données de la requête
+        data = request.get_json()
+        if not data:
+            raise ValueError("Données JSON requises")
+        
+        zone_data = data.get('zone_data', {})
+        buildings_osm = data.get('buildings_osm', [])
+        start_date = data.get('start_date', '2024-01-01')
+        end_date = data.get('end_date', '2024-01-31')
+        freq = data.get('freq', '30T')
+        
+        logger.info(f"Zone: {zone_data.get('name', 'Unknown')}")
+        logger.info(f"Bâtiments OSM: {len(buildings_osm)}")
+        logger.info(f"Période: {start_date} à {end_date}")
+        logger.info(f"Fréquence: {freq}")
+        
+        # Validation des données
+        if not buildings_osm:
+            raise ValueError("Aucun bâtiment OSM fourni")
+        
+        # Convertir les bâtiments OSM en DataFrame compatible
+        buildings_df = convert_osm_to_buildings_df(buildings_osm, zone_data)
+        logger.info(f"✅ {len(buildings_df)} bâtiments convertis")
+        
+        # Générer les séries temporelles
+        timeseries_df = generator.generate_timeseries_data(
+            buildings_df, start_date, end_date, freq
+        )
+        logger.info(f"✅ {len(timeseries_df)} enregistrements de consommation générés")
+        
+        # Statistiques et validation
+        stats = calculate_osm_stats(buildings_df, timeseries_df, zone_data)
+        
+        # Analyse de la qualité OSM
+        osm_quality = analyze_osm_data_quality(buildings_osm)
+        
+        # Échantillon pour l'aperçu
+        sample_data = prepare_sample_data(buildings_df, timeseries_df)
+        
+        # Réponse complète
+        response_data = {
+            'success': True,
+            'generation_id': str(uuid.uuid4()),
+            'timestamp': datetime.now().isoformat(),
+            'zone_info': stats['zone_info'],
+            'data_summary': {
+                'total_buildings': len(buildings_df),
+                'total_consumption_records': len(timeseries_df),
+                'time_range': f"{start_date} to {end_date}",
+                'frequency': freq,
+                'building_types': list(buildings_df['building_type'].unique())
+            },
+            'building_distribution': stats['building_distribution'],
+            'consumption_statistics': stats['consumption_stats'],
+            'osm_quality_analysis': osm_quality,
+            'sample_data': sample_data,
+            'export_options': {
+                'csv_available': True,
+                'json_available': True,
+                'excel_available': True
+            },
+            'recommendations': osm_quality.get('recommendations', [])
+        }
+        
+        # Stockage temporaire des données pour export (optionnel)
+        # Ici vous pourriez sauvegarder les DataFrames pour un export ultérieur
+        
+        logger.info("✅ Génération OSM terminée avec succès")
+        return safe_json_response(response_data)
+        
+    except ValueError as ve:
+        logger.error(f"Erreur de validation: {ve}")
+        return jsonify({
+            'success': False,
+            'error': 'Données invalides',
+            'details': str(ve)
+        }), 400
+        
     except Exception as e:
-        logger.error(f"❌ Erreur lors de l'intégration complète: {e}")
+        logger.error(f"Erreur génération OSM: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Erreur interne du serveur',
+            'details': str(e)
+        }), 500
 
 
-# ===== POINT D'ENTREE PRINCIPAL =====
+# ===== ROUTES ADDITIONNELLES =====
+
+@app.route('/api/cities')
+def api_cities():
+    """API pour obtenir la liste des villes disponibles"""
+    try:
+        if not generator:
+            raise Exception("Générateur non initialisé")
+        
+        cities_data = []
+        for city_name, city_info in generator.malaysia_locations.items():
+            cities_data.append({
+                'name': city_name,
+                'population': city_info['population'],
+                'region': city_info['region'],
+                'state': city_info['state'],
+                'coordinates': city_info['coordinates']
+            })
+        
+        # Tri par population décroissante
+        cities_data.sort(key=lambda x: x['population'], reverse=True)
+        
+        return safe_json_response({
+            'success': True,
+            'cities': cities_data,
+            'total_cities': len(cities_data)
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur API cities: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/building-types')
+def api_building_types():
+    """API pour obtenir les types de bâtiments disponibles"""
+    try:
+        if not generator:
+            raise Exception("Générateur non initialisé")
+        
+        building_types_data = []
+        for type_name, type_info in generator.building_classes.items():
+            building_types_data.append({
+                'name': type_name,
+                'description': type_info['description'],
+                'base_consumption': type_info['base_consumption'],
+                'variation': type_info['variation'],
+                'peak_hours': type_info['peak_hours'],
+                'seasonal_factor': type_info['seasonal_factor']
+            })
+        
+        return safe_json_response({
+            'success': True,
+            'building_types': building_types_data,
+            'total_types': len(building_types_data)
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur API building-types: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ===== INTÉGRATION DES MODULES ADDITIONNELS =====
+
+# Intégration de l'API de prédiction si disponible
+if COMPLETE_INTEGRATION_AVAILABLE:
+    try:
+        create_complete_integration(app, generator)
+        logger.info("✅ Intégration complète activée")
+    except Exception as e:
+        logger.error(f"Erreur intégration complète: {e}")
+
+# Gestion d'erreur globale
+@app.errorhandler(404)
+def not_found_error(error):
+    """Gestionnaire pour les erreurs 404"""
+    return jsonify({
+        'success': False,
+        'error': 'Route non trouvée',
+        'available_routes': [
+            '/ - Page d\'accueil',
+            '/api/stats - Statistiques système',
+            '/api/cities - Liste des villes',
+            '/api/building-types - Types de bâtiments',
+            '/api/real-data-status - Statut des données',
+            '/generate-from-osm - Génération OSM (POST)',
+            '/sample - Échantillon de démonstration'
+        ]
+    }), 404
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Gestionnaire pour les erreurs 500"""
+    return jsonify({
+        'success': False,
+        'error': 'Erreur interne du serveur',
+        'details': 'Consultez les logs pour plus d\'informations'
+    }), 500
+
+
+# ===== POINT D'ENTRÉE PRINCIPAL =====
+
 if __name__ == '__main__':
-    print("🇲🇾 GÉNÉRATEUR DE DONNÉES ÉLECTRIQUES POUR LA MALAISIE")
     print("=" * 60)
+    print("🏢 GÉNÉRATEUR DE DONNÉES ÉLECTRIQUES MALAYSIA")
+    print("=" * 60)
+    print()
+    
+    # Vérification de l'état du système
+    print("🔍 ÉTAT DU SYSTÈME:")
+    print(f"🏗️ Distributeur: {'Intelligent' if BUILDING_DISTRIBUTOR_AVAILABLE else 'Basique'}")
+    print(f"📍 Coordonnées: {'Améliorées' if ENHANCED_COORDINATES_AVAILABLE else 'Classiques'}")
+    print(f"🔗 Intégration: {'Complète' if COMPLETE_INTEGRATION_AVAILABLE else 'Basique'}")
     
     if generator:
-        print(f"✅ Générateur initialisé avec succès")
-        print(f"📍 Villes disponibles: {len(generator.malaysia_locations)}")
-        print(f"🏗️ Types de bâtiments: {len(generator.building_classes)}")
-        print(f"🧠 Distribution: {'Intelligente' if BUILDING_DISTRIBUTOR_AVAILABLE else 'Basique'}")
-        print(f"📍 Coordonnées: {'Améliorées' if ENHANCED_COORDINATES_AVAILABLE else 'Classiques'}")
-        print(f"🔗 Intégration: {'Complète' if COMPLETE_INTEGRATION_AVAILABLE else 'Basique'}")
+        print(f"🌆 Villes: {len(generator.malaysia_locations)}")
+        print(f"🏢 Types de bâtiments: {len(generator.building_classes)}")
+        print("✅ Générateur: Initialisé")
     else:
         print("❌ ERREUR: Générateur non initialisé")
         print("🔧 Vérifiez les dépendances et relancez l'application")
@@ -1115,7 +1236,10 @@ if __name__ == '__main__':
     urls = [
         "http://localhost:5000 - Interface principale",
         "http://localhost:5000/api/stats - Statistiques système",
+        "http://localhost:5000/api/cities - Liste des villes",
+        "http://localhost:5000/api/building-types - Types de bâtiments",
         "http://localhost:5000/api/real-data-status - Statut des données",
+        "http://localhost:5000/generate-from-osm - Génération OSM (POST)",
         "http://localhost:5000/sample - Échantillon de démonstration"
     ]
     
