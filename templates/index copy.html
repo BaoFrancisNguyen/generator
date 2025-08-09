@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🇲🇾⚡ Générateur de Données Électriques - Malaisie</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    
+    <!-- Styles supplémentaires pour le prédicteur -->
+    <style>
+        /* Indicateur de statut du système */
+        .system-status-indicator {
+            background: linear-gradient(135deg, #e3f2fd 0%, #f1f8e6 100%);
+            border: 2px solid #2196f3;
+            border-radius: 12px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
+        }
+        
+        .system-status-indicator.real-data {
+            border-color: #4caf50;
+            background: linear-gradient(135deg, #e8f5e8 0%, #f1f8e6 100%);
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .status-badge.official {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .status-badge.estimated {
+            background: #2196f3;
+            color: white;
+        }
+        
+        /* Amélioration de l'affichage des résultats */
+        .data-quality-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+        
+        .data-quality-badge.badge-official {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .data-quality-badge.badge-estimated {
+            background: #ff9800;
+            color: white;
+        }
+        
+        .city-data-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            margin: 4px 0;
+            border-radius: 6px;
+            border-left: 4px solid #ddd;
+        }
+        
+        .city-data-item.official {
+            border-left-color: #4caf50;
+            background: #f1f8e6;
+        }
+        
+        .city-data-item.estimated {
+            border-left-color: #ff9800;
+            background: #fff3e0;
+        }
+        
+        /* Animation pour le prédicteur */
+        .predictor-loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        .predictor-ready {
+            opacity: 1;
+            pointer-events: auto;
+            transition: opacity 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🇲🇾⚡ Générateur de Données Électriques</h1>
+            <p style="font-size: 1.2em; opacity: 0.9;">Malaisie - Données ultra-réalistes avec climat tropical</p>
+            
+            <!-- Indicateur de statut du système -->
+            <div class="system-status-indicator" id="systemStatusIndicator">
+                <div id="dataStatusIndicator">
+                    <span class="status-badge estimated">📊 CHARGEMENT...</span>
+                    <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.9;">
+                        Initialisation du système...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Formulaire principal -->
+        <div class="card">
+            <h2>📊 Configuration de la Génération</h2>
+            
+            <!-- Section de filtrage géographique -->
+            <div class="card" style="background: #f8f9fa; margin-bottom: 25px;">
+                <h3 style="color: #495057; margin-bottom: 20px;">🗺️ Filtrage Géographique</h3>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="locationMode">Mode de Localisation</label>
+                        <select id="locationMode" onchange="toggleLocationMode()">
+                            <option value="all">🇲🇾 Toute la Malaisie</option>
+                            <option value="filter">🎯 Filtrer par zone</option>
+                            <option value="custom">➕ Localisation personnalisée</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Filtres par zone -->
+                <div id="filterSection" style="display: none;">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="filterRegion">🌏 Région</label>
+                            <select id="filterRegion" onchange="updateStateOptions()">
+                                <option value="all">Toutes les régions</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="filterState">🏛️ État</label>
+                            <select id="filterState" onchange="updateCityOptions()">
+                                <option value="all">Tous les états</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="filterCity">🏙️ Ville</label>
+                            <select id="filterCity">
+                                <option value="all">Toutes les villes</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="populationRange">👥 Population</label>
+                            <select id="populationRange" onchange="updatePopulationInputs()">
+                                <option value="all">Toutes tailles</option>
+                                <option value="large">Grandes villes (>500K)</option>
+                                <option value="medium">Villes moyennes (200K-500K)</option>
+                                <option value="small">Petites villes (<200K)</option>
+                                <option value="custom">Plage personnalisée</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="customPopulationRange" style="display: none;">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="popMin">Population Min</label>
+                                <input type="number" id="popMin" placeholder="Ex: 50000">
+                            </div>
+                            <div class="form-group">
+                                <label for="popMax">Population Max</label>
+                                <input type="number" id="popMax" placeholder="Ex: 1000000">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Localisation personnalisée -->
+                <div id="customSection" style="display: none;">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="customCity">🏙️ Nom de la Ville</label>
+                            <input type="text" id="customCity" placeholder="Ex: Nouvelle Ville">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="customState">🏛️ État/Province</label>
+                            <input type="text" id="customState" placeholder="Ex: Nouvel État">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="customRegion">🌏 Région</label>
+                            <select id="customRegion">
+                                <option value="Central">Central</option>
+                                <option value="Northern">Northern</option>
+                                <option value="Southern">Southern</option>
+                                <option value="East Coast">East Coast</option>
+                                <option value="East Malaysia">East Malaysia</option>
+                                <option value="Custom">Région personnalisée</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="customPopulation">👥 Population</label>
+                            <input type="number" id="customPopulation" placeholder="Ex: 250000">
+                        </div>
+                    </div>
+                    
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="customLat">📍 Latitude</label>
+                            <input type="number" step="0.000001" id="customLat" placeholder="Ex: 3.1390">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="customLon">📍 Longitude</label>
+                            <input type="number" step="0.000001" id="customLon" placeholder="Ex: 101.6869">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Paramètres de génération -->
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="numBuildings">🏢 Nombre de Bâtiments</label>
+                    <input type="number" id="numBuildings" value="50" min="1" max="10000" onchange="updateEstimation()" oninput="updateEstimation()">
+                    <small id="buildingGuidance" style="color: #666; font-size: 0.9em; margin-top: 5px; display: block;"></small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="freq">⏰ Fréquence d'Échantillonnage</label>
+                    <select id="freq" onchange="updateEstimation()">
+                        <option value="5T">5 minutes (très détaillé)</option>
+                        <option value="15T">15 minutes (détaillé)</option>
+                        <option value="30T" selected>30 minutes</option>
+                        <option value="1H">1 heure (standard)</option>
+                        <option value="2H">2 heures</option>
+                        <option value="6H">6 heures</option>
+                        <option value="12H">12 heures (2x/jour)</option>
+                        <option value="1D">1 jour (quotidien)</option>
+                        <option value="1W">1 semaine (hebdomadaire)</option>
+                        <option value="1M">1 mois (mensuel)</option>
+                    </select>
+                    <small id="freqInfo" style="color: #666; font-size: 0.9em;"></small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="startDate">📅 Date de Début</label>
+                    <input type="date" id="startDate" value="2024-01-01" onchange="updateEstimation()">
+                </div>
+                
+                <div class="form-group">
+                    <label for="endDate">📅 Date de Fin</label>
+                    <input type="date" id="endDate" value="2024-01-31" onchange="updateEstimation()">
+                </div>
+            </div>
+            
+            <!-- Section d'estimation -->
+            <div class="estimation-card" id="estimationCard">
+                <h3>📊 Estimation du Dataset</h3>
+                <div class="estimation-grid">
+                    <div class="estimation-item">
+                        <span class="estimation-label">📈 Observations totales:</span>
+                        <span class="estimation-value" id="totalObservations">-</span>
+                    </div>
+                    <div class="estimation-item">
+                        <span class="estimation-label">💾 Taille fichier (~):</span>
+                        <span class="estimation-value" id="fileSize">-</span>
+                    </div>
+                    <div class="estimation-item">
+                        <span class="estimation-label">⏱️ Temps génération (~):</span>
+                        <span class="estimation-value" id="generationTime">-</span>
+                    </div>
+                    <div class="estimation-item">
+                        <span class="estimation-label">🎯 Cas d'usage:</span>
+                        <span class="estimation-value" id="useCase">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- PANNEAU DE PRÉDICTION SERA INSÉRÉ ICI PAR LE JAVASCRIPT -->
+            
+            <!-- Section de recommandations -->
+            <div class="guidance-section">
+                <h4>💡 Guide de Configuration</h4>
+                <div class="guidance-recommendations">
+                    <div class="recommendation-item">
+                        <strong>🧪 Test Rapide</strong><br>
+                        5-20 bâtiments, 1 semaine, 1H<br>
+                        <em>~3K observations, <10s</em>
+                    </div>
+                    <div class="recommendation-item">
+                        <strong>📚 Développement</strong><br>
+                        50-200 bâtiments, 1-3 mois, 30T<br>
+                        <em>~200K observations, 1-3min</em>
+                    </div>
+                    <div class="recommendation-item">
+                        <strong>🤖 Machine Learning</strong><br>
+                        200-1000 bâtiments, 6-12 mois, 1H<br>
+                        <em>~1M observations, 5-10min</em>
+                    </div>
+                    <div class="recommendation-item">
+                        <strong>🏭 Production</strong><br>
+                        1000-5000 bâtiments, 1-3 ans, 30T<br>
+                        <em>~20M observations, 20+ min</em>
+                    </div>
+                    <div class="recommendation-item">
+                        <strong>📊 Analyse Quotidienne</strong><br>
+                        100-500 bâtiments, 1 an, 1D<br>
+                        <em>~180K observations, 1min</em>
+                    </div>
+                    <div class="recommendation-item">
+                        <strong>📈 Tendances Long Terme</strong><br>
+                        1000+ bâtiments, 5+ ans, 1W/1M<br>
+                        <em>~500K observations, 3-5min</em>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Boutons d'action -->
+            <div class="button-group">
+                <button class="btn" onclick="generateData()">🚀 Générer et Visualiser</button>
+                <button class="btn btn-success" onclick="downloadData()">💾 Générer et Télécharger</button>
+                <button class="btn btn-warning" onclick="showSample()">👁️ Voir un Échantillon</button>
+            </div>
+        </div>
+
+        <!-- Zone de chargement -->
+        <div class="loading" id="loading">
+            <h2>🌴 Génération en cours pour la Malaisie...</h2>
+            <p>Création de données électriques tropicales réalistes, veuillez patienter.</p>
+            <div style="margin-top: 20px;">
+                <div class="spinner"></div>
+            </div>
+        </div>
+
+        <!-- Résultats -->
+        <div class="results" id="results">
+            <div id="alerts"></div>
+            
+            <!-- Panneau de validation (si disponible) -->
+            <div class="validation-panel" id="validationPanel" style="display: none;">
+                <h3>🔍 Validation Automatique</h3>
+                <div class="validation-content">
+                    <div class="validation-score" id="validationScore">-</div>
+                    <div class="validation-details" id="validationDetails"></div>
+                </div>
+            </div>
+            
+            <!-- Panneau de qualité des données -->
+            <div class="data-source-panel" id="dataQualityPanel" style="display: none;">
+                <!-- Contenu généré dynamiquement -->
+            </div>
+            
+            <div class="stats-grid" id="statsGrid"></div>
+            <div id="dataPreview"></div>
+        </div>
+        
+        <!-- Panneau de statut système (affiché seulement si nécessaire) -->
+        <div class="system-status-panel" id="systemStatus" style="display: none;">
+            <!-- Contenu généré dynamiquement -->
+        </div>
+    </div>
+
+    <!-- Scripts JavaScript -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    
+    <!-- Script du prédicteur de bâtiments (nouveau) -->
+    <script src="{{ url_for('static', filename='building_predictor_frontend_fixed.js') }}"></script>
+    
+    <!-- Script d'initialisation personnalisé -->
+    <script>
+        // Configuration globale pour l'application
+        window.APP_CONFIG = {
+            predictorEnabled: true,
+            realDataAvailable: false, // Sera mis à jour dynamiquement
+            validationEnabled: false, // Sera mis à jour dynamiquement
+            debugMode: false
+        };
+        
+        // Fonction d'initialisation améliorée
+        function initializeApplication() {
+            console.log('🚀 Initialisation de l\'application Malaysia...');
+            
+            // Charger le statut du système
+            loadSystemStatus();
+            
+            // Initialiser l'estimation
+            updateEstimation();
+            
+            // Vérifier la disponibilité du prédicteur
+            checkPredictorAvailability();
+            
+            console.log('✅ Application initialisée');
+        }
+        
+        // Vérifier la disponibilité du prédicteur
+        function checkPredictorAvailability() {
+            // Vérifier toutes les 500ms pendant 10 secondes max
+            let checkCount = 0;
+            const maxChecks = 20;
+            
+            const checkInterval = setInterval(() => {
+                checkCount++;
+                
+                if (window.BuildingPredictorAPI && window.BuildingPredictorAPI.isReady()) {
+                    clearInterval(checkInterval);
+                    console.log('✅ Prédicteur de bâtiments prêt');
+                    updateSystemStatusIndicator('predictor_ready');
+                } else if (checkCount >= maxChecks) {
+                    clearInterval(checkInterval);
+                    console.warn('⚠️ Prédicteur non disponible après 10 secondes');
+                    updateSystemStatusIndicator('predictor_unavailable');
+                }
+            }, 500);
+        }
+        
+        // Charger le statut du système depuis l'API
+        async function loadSystemStatus() {
+            try {
+                const response = await fetch('/api/real-data-status');
+                const data = await response.json();
+                
+                if (data.success && data.status) {
+                    window.APP_CONFIG.realDataAvailable = data.status.real_data_available;
+                    window.APP_CONFIG.validationEnabled = data.status.validation_enabled;
+                    
+                    updateSystemStatusIndicator('system_loaded', data.status);
+                }
+            } catch (error) {
+                console.warn('⚠️ Impossible de charger le statut système:', error);
+                updateSystemStatusIndicator('system_error');
+            }
+        }
+        
+        // Mettre à jour l'indicateur de statut
+        function updateSystemStatusIndicator(status, statusData = null) {
+            const indicator = document.getElementById('dataStatusIndicator');
+            if (!indicator) return;
+            
+            switch (status) {
+                case 'system_loaded':
+                    if (statusData && statusData.real_data_available) {
+                        indicator.innerHTML = `
+                            <span class="status-badge official">🎯 VRAIES DONNÉES ACTIVES</span>
+                            <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.9;">
+                                Sources officielles Malaysia + Prédicteur intelligent
+                            </div>
+                        `;
+                        document.getElementById('systemStatusIndicator').classList.add('real-data');
+                    } else {
+                        indicator.innerHTML = `
+                            <span class="status-badge estimated">📊 MODE ESTIMATION</span>
+                            <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.9;">
+                                Distribution intelligente + Prédicteur intégré
+                            </div>
+                        `;
+                    }
+                    break;
+                    
+                case 'predictor_ready':
+                    // Ajouter une note sur le prédicteur
+                    const currentContent = indicator.innerHTML;
+                    if (!currentContent.includes('Prédicteur')) {
+                        indicator.innerHTML = currentContent.replace(
+                            'Sources officielles Malaysia',
+                            'Sources officielles Malaysia + Prédicteur intelligent'
+                        ).replace(
+                            'Distribution intelligente',
+                            'Distribution intelligente + Prédicteur intégré'
+                        );
+                    }
+                    break;
+                    
+                case 'predictor_unavailable':
+                    console.log('ℹ️ Fonctionnement sans prédicteur frontend');
+                    break;
+                    
+                case 'system_error':
+                    indicator.innerHTML = `
+                        <span class="status-badge estimated">⚠️ MODE DÉGRADÉ</span>
+                        <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.9;">
+                            Fonctionnement basique - Vérifiez la connexion
+                        </div>
+                    `;
+                    break;
+            }
+        }
+        
+        // Test de connectivité API (fonction améliorée)
+        async function testAPIConnectivity() {
+            console.log('🔗 Test de connectivité API étendu...');
+            
+            const endpoints = [
+                '/api/stats',
+                '/api/real-data-status',
+                '/api/predictor/stats',
+                '/sample'
+            ];
+            
+            const results = {};
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const response = await fetch(endpoint);
+                    results[endpoint] = {
+                        status: response.status,
+                        ok: response.ok,
+                        available: response.ok
+                    };
+                } catch (error) {
+                    results[endpoint] = {
+                        status: 'ERROR',
+                        ok: false,
+                        available: false,
+                        error: error.message
+                    };
+                }
+            }
+            
+            console.table(results);
+            return results;
+        }
+        
+        // Diagnostic avancé de l'application
+        function diagnosticApplication() {
+            console.log('\n🔍 DIAGNOSTIC COMPLET DE L\'APPLICATION');
+            console.log('=' .repeat(50));
+            
+            // Statut général
+            console.log('Configuration:', window.APP_CONFIG);
+            
+            // Éléments DOM critiques
+            const criticalElements = [
+                'numBuildings', 'locationMode', 'estimationCard', 'systemStatusIndicator',
+                'buildingPredictionPanelFixed', 'dataStatusIndicator'
+            ];
+            
+            console.log('\nÉléments DOM:');
+            criticalElements.forEach(id => {
+                const element = document.getElementById(id);
+                console.log(`  ${id}: ${element ? '✅' : '❌'}`);
+            });
+            
+            // API disponibles
+            console.log('\nAPIs disponibles:');
+            console.log(`  Script principal: ${typeof window.updateEstimation === 'function' ? '✅' : '❌'}`);
+            console.log(`  Prédicteur: ${window.BuildingPredictorAPI ? '✅' : '❌'}`);
+            console.log(`  Prédicteur prêt: ${window.BuildingPredictorAPI?.isReady() ? '✅' : '❌'}`);
+            
+            // Test prédicteur si disponible
+            if (window.BuildingPredictorAPI?.isReady()) {
+                const stats = window.BuildingPredictorAPI.getStats();
+                console.log('\nStatistiques prédicteur:', stats);
+            }
+            
+            return {
+                config: window.APP_CONFIG,
+                domElements: criticalElements.map(id => ({
+                    id, 
+                    available: !!document.getElementById(id)
+                })),
+                apis: {
+                    mainScript: typeof window.updateEstimation === 'function',
+                    predictor: !!window.BuildingPredictorAPI,
+                    predictorReady: window.BuildingPredictorAPI?.isReady() || false
+                }
+            };
+        }
+        
+        // Exposer les fonctions de débogage
+        window.diagnosticApplication = diagnosticApplication;
+        window.testAPIConnectivity = testAPIConnectivity;
+        window.loadSystemStatus = loadSystemStatus;
+        
+        // Initialisation au chargement de la page
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApplication);
+        } else {
+            setTimeout(initializeApplication, 100);
+        }
+        
+        // Message de bienvenue dans la console
+        console.log(`
+🇲🇾 GÉNÉRATEUR ÉLECTRICITÉ MALAYSIA - VERSION INTÉGRÉE
+====================================================
+✅ Interface principale chargée
+🔮 Prédicteur intelligent intégré
+🎯 Support vraies données officielles Malaysia
+🔧 Outils de diagnostic disponibles
+
+Fonctions de débogage:
+- diagnosticApplication() - Diagnostic complet
+- testAPIConnectivity() - Test des APIs
+- window.BuildingPredictorAPI - API du prédicteur
+
+Prêt à générer des données pour Malaysia! 🚀
+        `);
+    </script>
+</body>
+</html>

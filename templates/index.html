@@ -3,604 +3,1228 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🇲🇾⚡ Générateur de Données Électriques - Malaisie</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Générateur Malaysia - Basé sur OpenStreetMap</title>
     
-    <!-- Styles supplémentaires pour le prédicteur -->
-    <style>
-        /* Indicateur de statut du système */
-        .system-status-indicator {
-            background: linear-gradient(135deg, #e3f2fd 0%, #f1f8e6 100%);
-            border: 2px solid #2196f3;
-            border-radius: 12px;
-            padding: 15px;
-            margin: 15px 0;
-            text-align: center;
-        }
-        
-        .system-status-indicator.real-data {
-            border-color: #4caf50;
-            background: linear-gradient(135deg, #e8f5e8 0%, #f1f8e6 100%);
-        }
-        
-        .status-badge {
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 6px;
-            font-weight: bold;
-            font-size: 0.9em;
-        }
-        
-        .status-badge.official {
-            background: #4caf50;
-            color: white;
-        }
-        
-        .status-badge.estimated {
-            background: #2196f3;
-            color: white;
-        }
-        
-        /* Amélioration de l'affichage des résultats */
-        .data-quality-badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8em;
-            font-weight: bold;
-            margin-left: 8px;
-        }
-        
-        .data-quality-badge.badge-official {
-            background: #4caf50;
-            color: white;
-        }
-        
-        .data-quality-badge.badge-estimated {
-            background: #ff9800;
-            color: white;
-        }
-        
-        .city-data-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 12px;
-            margin: 4px 0;
-            border-radius: 6px;
-            border-left: 4px solid #ddd;
-        }
-        
-        .city-data-item.official {
-            border-left-color: #4caf50;
-            background: #f1f8e6;
-        }
-        
-        .city-data-item.estimated {
-            border-left-color: #ff9800;
-            background: #fff3e0;
-        }
-        
-        /* Animation pour le prédicteur */
-        .predictor-loading {
-            opacity: 0.6;
-            pointer-events: none;
-        }
-        
-        .predictor-ready {
-            opacity: 1;
-            pointer-events: auto;
-            transition: opacity 0.3s ease;
-        }
-    </style>
+    <!-- Styles existants -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='professional_styles.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🇲🇾⚡ Générateur de Données Électriques</h1>
-            <p style="font-size: 1.2em; opacity: 0.9;">Malaisie - Données ultra-réalistes avec climat tropical</p>
-            
-            <!-- Indicateur de statut du système -->
-            <div class="system-status-indicator" id="systemStatusIndicator">
-                <div id="dataStatusIndicator">
-                    <span class="status-badge estimated">📊 CHARGEMENT...</span>
-                    <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.9;">
-                        Initialisation du système...
+    <!-- Header professionnel -->
+    <header class="main-header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo-section">
+                    <div class="logo-icon">🇲🇾</div>
+                    <div class="logo-text">
+                        <h1>Malaysia OSM Generator</h1>
+                        <p>Génération basée sur données OpenStreetMap réelles</p>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <div class="badge badge-success" id="systemStatus">
+                        ✅ Système opérationnel
                     </div>
                 </div>
             </div>
         </div>
+    </header>
 
-        <!-- Formulaire principal -->
-        <div class="card">
-            <h2>📊 Configuration de la Génération</h2>
-            
-            <!-- Section de filtrage géographique -->
-            <div class="card" style="background: #f8f9fa; margin-bottom: 25px;">
-                <h3 style="color: #495057; margin-bottom: 20px;">🗺️ Filtrage Géographique</h3>
-                
-                <div class="form-grid">
+    <div class="container">
+        <!-- SÉLECTION DE ZONE GÉOGRAPHIQUE -->
+        <div class="professional-card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    🗺️ Sélection de zone géographique
+                </h3>
+                <div class="card-badge">OpenStreetMap</div>
+            </div>
+
+            <div class="grid grid-2">
+                <!-- Sélection de zone -->
+                <div class="form-section">
+                    <h3>📍 Choisir la zone d'étude</h3>
+                    
                     <div class="form-group">
-                        <label for="locationMode">Mode de Localisation</label>
-                        <select id="locationMode" onchange="toggleLocationMode()">
-                            <option value="all">🇲🇾 Toute la Malaisie</option>
-                            <option value="filter">🎯 Filtrer par zone</option>
-                            <option value="custom">➕ Localisation personnalisée</option>
+                        <label for="zoneType">Type de zone</label>
+                        <select id="zoneType" class="form-control" onchange="updateZoneOptions()">
+                            <option value="country">🇲🇾 Malaisie entière</option>
+                            <option value="state">🏛️ État/Province</option>
+                            <option value="city" selected>🏙️ Ville</option>
+                            <option value="district">🏘️ Quartier/District</option>
+                            <option value="custom">📐 Zone personnalisée</option>
                         </select>
                     </div>
-                </div>
-                
-                <!-- Filtres par zone -->
-                <div id="filterSection" style="display: none;">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="filterRegion">🌏 Région</label>
-                            <select id="filterRegion" onchange="updateStateOptions()">
-                                <option value="all">Toutes les régions</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="filterState">🏛️ État</label>
-                            <select id="filterState" onchange="updateCityOptions()">
-                                <option value="all">Tous les états</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="filterCity">🏙️ Ville</label>
-                            <select id="filterCity">
-                                <option value="all">Toutes les villes</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="populationRange">👥 Population</label>
-                            <select id="populationRange" onchange="updatePopulationInputs()">
-                                <option value="all">Toutes tailles</option>
-                                <option value="large">Grandes villes (>500K)</option>
-                                <option value="medium">Villes moyennes (200K-500K)</option>
-                                <option value="small">Petites villes (<200K)</option>
-                                <option value="custom">Plage personnalisée</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div id="customPopulationRange" style="display: none;">
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label for="popMin">Population Min</label>
-                                <input type="number" id="popMin" placeholder="Ex: 50000">
-                            </div>
-                            <div class="form-group">
-                                <label for="popMax">Population Max</label>
-                                <input type="number" id="popMax" placeholder="Ex: 1000000">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Localisation personnalisée -->
-                <div id="customSection" style="display: none;">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="customCity">🏙️ Nom de la Ville</label>
-                            <input type="text" id="customCity" placeholder="Ex: Nouvelle Ville">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="customState">🏛️ État/Province</label>
-                            <input type="text" id="customState" placeholder="Ex: Nouvel État">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="customRegion">🌏 Région</label>
-                            <select id="customRegion">
-                                <option value="Central">Central</option>
-                                <option value="Northern">Northern</option>
-                                <option value="Southern">Southern</option>
-                                <option value="East Coast">East Coast</option>
-                                <option value="East Malaysia">East Malaysia</option>
-                                <option value="Custom">Région personnalisée</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="customPopulation">👥 Population</label>
-                            <input type="number" id="customPopulation" placeholder="Ex: 250000">
-                        </div>
-                    </div>
-                    
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="customLat">📍 Latitude</label>
-                            <input type="number" step="0.000001" id="customLat" placeholder="Ex: 3.1390">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="customLon">📍 Longitude</label>
-                            <input type="number" step="0.000001" id="customLon" placeholder="Ex: 101.6869">
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Paramètres de génération -->
-            <div class="form-grid">
-                <div class="form-group">
-                    <label for="numBuildings">🏢 Nombre de Bâtiments</label>
-                    <input type="number" id="numBuildings" value="50" min="1" max="10000" onchange="updateEstimation()" oninput="updateEstimation()">
-                    <small id="buildingGuidance" style="color: #666; font-size: 0.9em; margin-top: 5px; display: block;"></small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="freq">⏰ Fréquence d'Échantillonnage</label>
-                    <select id="freq" onchange="updateEstimation()">
-                        <option value="5T">5 minutes (très détaillé)</option>
-                        <option value="15T">15 minutes (détaillé)</option>
-                        <option value="30T" selected>30 minutes</option>
-                        <option value="1H">1 heure (standard)</option>
-                        <option value="2H">2 heures</option>
-                        <option value="6H">6 heures</option>
-                        <option value="12H">12 heures (2x/jour)</option>
-                        <option value="1D">1 jour (quotidien)</option>
-                        <option value="1W">1 semaine (hebdomadaire)</option>
-                        <option value="1M">1 mois (mensuel)</option>
-                    </select>
-                    <small id="freqInfo" style="color: #666; font-size: 0.9em;"></small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="startDate">📅 Date de Début</label>
-                    <input type="date" id="startDate" value="2024-01-01" onchange="updateEstimation()">
-                </div>
-                
-                <div class="form-group">
-                    <label for="endDate">📅 Date de Fin</label>
-                    <input type="date" id="endDate" value="2024-01-31" onchange="updateEstimation()">
-                </div>
-            </div>
-            
-            <!-- Section d'estimation -->
-            <div class="estimation-card" id="estimationCard">
-                <h3>📊 Estimation du Dataset</h3>
-                <div class="estimation-grid">
-                    <div class="estimation-item">
-                        <span class="estimation-label">📈 Observations totales:</span>
-                        <span class="estimation-value" id="totalObservations">-</span>
-                    </div>
-                    <div class="estimation-item">
-                        <span class="estimation-label">💾 Taille fichier (~):</span>
-                        <span class="estimation-value" id="fileSize">-</span>
-                    </div>
-                    <div class="estimation-item">
-                        <span class="estimation-label">⏱️ Temps génération (~):</span>
-                        <span class="estimation-value" id="generationTime">-</span>
-                    </div>
-                    <div class="estimation-item">
-                        <span class="estimation-label">🎯 Cas d'usage:</span>
-                        <span class="estimation-value" id="useCase">-</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- PANNEAU DE PRÉDICTION SERA INSÉRÉ ICI PAR LE JAVASCRIPT -->
-            
-            <!-- Section de recommandations -->
-            <div class="guidance-section">
-                <h4>💡 Guide de Configuration</h4>
-                <div class="guidance-recommendations">
-                    <div class="recommendation-item">
-                        <strong>🧪 Test Rapide</strong><br>
-                        5-20 bâtiments, 1 semaine, 1H<br>
-                        <em>~3K observations, <10s</em>
-                    </div>
-                    <div class="recommendation-item">
-                        <strong>📚 Développement</strong><br>
-                        50-200 bâtiments, 1-3 mois, 30T<br>
-                        <em>~200K observations, 1-3min</em>
-                    </div>
-                    <div class="recommendation-item">
-                        <strong>🤖 Machine Learning</strong><br>
-                        200-1000 bâtiments, 6-12 mois, 1H<br>
-                        <em>~1M observations, 5-10min</em>
-                    </div>
-                    <div class="recommendation-item">
-                        <strong>🏭 Production</strong><br>
-                        1000-5000 bâtiments, 1-3 ans, 30T<br>
-                        <em>~20M observations, 20+ min</em>
-                    </div>
-                    <div class="recommendation-item">
-                        <strong>📊 Analyse Quotidienne</strong><br>
-                        100-500 bâtiments, 1 an, 1D<br>
-                        <em>~180K observations, 1min</em>
-                    </div>
-                    <div class="recommendation-item">
-                        <strong>📈 Tendances Long Terme</strong><br>
-                        1000+ bâtiments, 5+ ans, 1W/1M<br>
-                        <em>~500K observations, 3-5min</em>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Boutons d'action -->
-            <div class="button-group">
-                <button class="btn" onclick="generateData()">🚀 Générer et Visualiser</button>
-                <button class="btn btn-success" onclick="downloadData()">💾 Générer et Télécharger</button>
-                <button class="btn btn-warning" onclick="showSample()">👁️ Voir un Échantillon</button>
+                    <!-- Options selon le type de zone -->
+                    <div id="stateOptions" class="form-group" style="display: none;">
+                        <label for="selectedState">État de Malaisie</label>
+                        <select id="selectedState" class="form-control">
+                            <option value="Selangor">Selangor</option>
+                            <option value="Johor">Johor</option>
+                            <option value="Perak">Perak</option>
+                            <option value="Pahang">Pahang</option>
+                            <option value="Penang">Penang</option>
+                            <option value="Kedah">Kedah</option>
+                            <option value="Kelantan">Kelantan</option>
+                            <option value="Terengganu">Terengganu</option>
+                            <option value="Negeri Sembilan">Negeri Sembilan</option>
+                            <option value="Malacca">Malacca</option>
+                            <option value="Perlis">Perlis</option>
+                            <option value="Sabah">Sabah</option>
+                            <option value="Sarawak">Sarawak</option>
+                            <option value="Federal Territory">Federal Territory</option>
+                        </select>
+                    </div>
+
+                    <div id="cityOptions" class="form-group">
+                        <label for="selectedCity">Ville de Malaisie</label>
+                        <select id="selectedCity" class="form-control" onchange="updateCityInfo()">
+                            <option value="Kuala Lumpur">Kuala Lumpur (1.8M hab.)</option>
+                            <option value="George Town">George Town (708K hab.)</option>
+                            <option value="Ipoh">Ipoh (657K hab.)</option>
+                            <option value="Shah Alam">Shah Alam (641K hab.)</option>
+                            <option value="Petaling Jaya">Petaling Jaya (613K hab.)</option>
+                            <option value="Johor Bahru">Johor Bahru (497K hab.)</option>
+                            <option value="Kota Kinabalu">Kota Kinabalu (452K hab.)</option>
+                            <option value="Kuching">Kuching (325K hab.)</option>
+                            <option value="Ampang Jaya">Ampang Jaya (315K hab.)</option>
+                            <option value="Klang">Klang (290K hab.)</option>
+                            <option value="Kajang">Kajang (280K hab.)</option>
+                            <option value="Seremban">Seremban (257K hab.)</option>
+                            <option value="Sungai Petani">Sungai Petani (246K hab.)</option>
+                            <option value="Tawau">Tawau (190K hab.)</option>
+                            <option value="Miri">Miri (187K hab.)</option>
+                        </select>
+                    </div>
+
+                    <div id="districtOptions" class="form-group" style="display: none;">
+                        <label for="districtName">Nom du quartier/district</label>
+                        <input type="text" id="districtName" class="form-control" 
+                               placeholder="Ex: KLCC, Bukit Bintang, Georgetown Heritage">
+                        <small class="text-light">Saisissez le nom du quartier ou utilisez la carte</small>
+                    </div>
+
+                    <div id="customOptions" style="display: none;">
+                        <div class="form-group">
+                            <label>Coordonnées de la zone personnalisée</label>
+                            <div class="grid grid-2">
+                                <input type="number" id="customLat" class="form-control" 
+                                       placeholder="Latitude" step="0.000001">
+                                <input type="number" id="customLon" class="form-control" 
+                                       placeholder="Longitude" step="0.000001">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="customRadius">Rayon (en mètres)</label>
+                            <input type="range" id="customRadius" min="100" max="10000" value="1000" 
+                                   class="form-control" oninput="updateRadiusDisplay()">
+                            <small class="text-light">Rayon: <span id="radiusDisplay">1000m</span></small>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-primary w-100 mt-3" onclick="previewZone()">
+                        🔍 Prévisualiser la zone
+                    </button>
+                </div>
+
+                <!-- Informations de la zone -->
+                <div class="form-section">
+                    <h3>📊 Informations de la zone</h3>
+                    
+                    <div class="data-card">
+                        <div class="data-card-header">
+                            <div class="data-card-title">Zone sélectionnée</div>
+                        </div>
+                        <div class="data-card-body">
+                            <div class="data-item">
+                                <span class="data-label">Nom:</span>
+                                <span class="data-value" id="zoneNameDisplay">-</span>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-label">Type:</span>
+                                <span class="data-value" id="zoneTypeDisplay">-</span>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-label">Population:</span>
+                                <span class="data-value" id="zonePopulationDisplay">-</span>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-label">Superficie:</span>
+                                <span class="data-value" id="zoneAreaDisplay">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="data-card mt-3">
+                        <div class="data-card-header">
+                            <div class="data-card-title">Estimation OSM</div>
+                        </div>
+                        <div class="data-card-body">
+                            <div class="data-item">
+                                <span class="data-label">Bâtiments estimés:</span>
+                                <span class="data-value" id="estimatedBuildings">-</span>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-label">Temps de requête:</span>
+                                <span class="data-value" id="queryTimeEstimate">-</span>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-label">Statut API:</span>
+                                <span class="data-value" id="apiStatus">🔄 En attente</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Zone de chargement -->
-        <div class="loading" id="loading">
-            <h2>🌴 Génération en cours pour la Malaisie...</h2>
-            <p>Création de données électriques tropicales réalistes, veuillez patienter.</p>
-            <div style="margin-top: 20px;">
-                <div class="spinner"></div>
+        <!-- CARTE DE PRÉVISUALISATION -->
+        <div class="professional-card" id="previewMapContainer">
+            <div class="card-header">
+                <h3 class="card-title">🗺️ Prévisualisation de la zone</h3>
+                <div class="flex gap-2">
+                    <button id="loadRealBuildings" class="btn btn-success btn-sm">
+                        🏗️ Charger bâtiments réels
+                    </button>
+                    <button id="centerOnZone" class="btn btn-secondary btn-sm">
+                        📍 Centrer sur zone
+                    </button>
+                    <button id="clearPreview" class="btn btn-outline btn-sm">
+                        🧹 Effacer
+                    </button>
+                </div>
+            </div>
+            
+            <div class="map-wrapper">
+                <div id="previewMap" class="leaflet-map"></div>
+                <div id="buildingStats" class="map-legend">
+                    <div class="legend-title">Statistiques des bâtiments</div>
+                    <div id="buildingTypesStats">
+                        <p class="text-center text-light">Chargez les bâtiments pour voir les statistiques</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-footer">
+                <div class="flex flex-between">
+                    <div id="mapStatus" class="text-secondary">
+                        Sélectionnez une zone et cliquez sur "Prévisualiser"
+                    </div>
+                    <div class="badge badge-info">
+                        <span id="loadedBuildingsCount">0</span> bâtiments chargés
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Résultats -->
-        <div class="results" id="results">
+        <!-- CONFIGURATION TEMPORELLE (CONSERVÉE) -->
+        <div class="professional-card">
+            <div class="card-header">
+                <h3 class="card-title">⏰ Configuration temporelle</h3>
+                <div class="card-badge">Horodatage</div>
+            </div>
+
+            <div class="grid grid-2">
+                <div class="form-section">
+                    <h3>📅 Période d'étude</h3>
+                    
+                    <div class="form-group">
+                        <label for="startDate">Date de début</label>
+                        <input type="date" id="startDate" class="form-control" 
+                               value="2024-01-01" onchange="updateEstimation()">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="endDate">Date de fin</label>
+                        <input type="date" id="endDate" class="form-control" 
+                               value="2024-01-31" onchange="updateEstimation()">
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>⏱️ Fréquence d'échantillonnage</h3>
+                    
+                    <div class="form-group">
+                        <label for="freq">Fréquence de mesure</label>
+                        <select id="freq" class="form-control" onchange="updateEstimation()">
+                            <option value="5T">5 minutes (très détaillé)</option>
+                            <option value="15T">15 minutes (détaillé)</option>
+                            <option value="30T" selected>30 minutes (standard)</option>
+                            <option value="1H">1 heure (efficace)</option>
+                            <option value="2H">2 heures</option>
+                            <option value="6H">6 heures</option>
+                            <option value="12H">12 heures (2x/jour)</option>
+                            <option value="1D">1 jour (quotidien)</option>
+                            <option value="1W">1 semaine (hebdomadaire)</option>
+                            <option value="1M">1 mois (mensuel)</option>
+                        </select>
+                        <small id="freqInfo" class="text-light">Impact sur la taille du dataset</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ESTIMATION DU DATASET (MISE À JOUR) -->
+        <div class="professional-card">
+            <div class="card-header">
+                <h3 class="card-title">📊 Estimation du dataset final</h3>
+                <div class="card-badge">Temps réel</div>
+            </div>
+            
+            <div class="stats-container" id="estimationCard">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalBuildings">-</div>
+                    <div class="stat-label">Bâtiments OSM</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalObservations">-</div>
+                    <div class="stat-label">Observations totales</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="fileSize">-</div>
+                    <div class="stat-label">Taille fichier (~)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="generationTime">-</div>
+                    <div class="stat-label">Temps génération (~)</div>
+                </div>
+            </div>
+
+            <!-- Répartition par type de bâtiment -->
+            <div class="professional-card mt-3">
+                <div class="card-header">
+                    <h4 class="card-title">🏗️ Répartition par type de bâtiment</h4>
+                </div>
+                <div class="grid grid-3" id="buildingTypesBreakdown">
+                    <!-- Sera rempli dynamiquement -->
+                </div>
+            </div>
+        </div>
+
+        <!-- BOUTONS D'ACTION -->
+        <div class="professional-card">
+            <div class="card-header">
+                <h3 class="card-title">🚀 Génération des données</h3>
+            </div>
+            
+            <div class="text-center p-4">
+                <div class="alert alert-info mb-4">
+                    <div class="alert-icon">ℹ️</div>
+                    <div>
+                        <strong>Nouvelle approche :</strong> Les données sont générées automatiquement 
+                        à partir des vrais bâtiments trouvés sur OpenStreetMap dans la zone sélectionnée.
+                        Les patterns de consommation électrique restent réalistes selon vos règles existantes.
+                    </div>
+                </div>
+                
+                <div class="flex flex-center gap-3">
+                    <button onclick="generateFromOSM()" class="btn btn-primary btn-lg">
+                        🏗️ Générer depuis OSM
+                    </button>
+                    <button onclick="downloadFromOSM()" class="btn btn-success btn-lg">
+                        💾 Générer et Télécharger
+                    </button>
+                    <button onclick="previewOSMData()" class="btn btn-warning">
+                        👁️ Aperçu des données
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ZONE DE CHARGEMENT -->
+        <div class="loading-container" id="loading" style="display: none;">
+            <div class="spinner"></div>
+            <div class="loading-text">
+                <h2>🌏 Récupération des données OpenStreetMap...</h2>
+                <p id="loadingStatus">Interrogation de l'API Overpass en cours...</p>
+                <div class="progress mt-3" style="width: 300px;">
+                    <div class="progress-bar" id="loadingProgress" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RÉSULTATS -->
+        <div id="results" class="fade-in" style="display: none;">
             <div id="alerts"></div>
             
-            <!-- Panneau de validation (si disponible) -->
-            <div class="validation-panel" id="validationPanel" style="display: none;">
-                <h3>🔍 Validation Automatique</h3>
-                <div class="validation-content">
-                    <div class="validation-score" id="validationScore">-</div>
-                    <div class="validation-details" id="validationDetails"></div>
+            <!-- Panneau de validation OSM -->
+            <div class="professional-card" id="osmValidationPanel" style="display: none;">
+                <div class="card-header">
+                    <h3 class="card-title">✅ Validation des données OSM</h3>
+                    <div class="card-badge">Qualité</div>
+                </div>
+                <div class="p-3">
+                    <div class="stats-container">
+                        <div class="stat-card">
+                            <div class="stat-value" id="osmDataQuality">-</div>
+                            <div class="stat-label">Score qualité OSM</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="osmCompleteness">-</div>
+                            <div class="stat-label">Complétude (%)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="osmFreshness">-</div>
+                            <div class="stat-label">Fraîcheur données</div>
+                        </div>
+                    </div>
+                    <div id="osmValidationDetails" class="mt-3"></div>
                 </div>
             </div>
             
-            <!-- Panneau de qualité des données -->
-            <div class="data-source-panel" id="dataQualityPanel" style="display: none;">
-                <!-- Contenu généré dynamiquement -->
-            </div>
+            <!-- Statistiques finales -->
+            <div class="stats-container" id="finalStatsGrid"></div>
             
-            <div class="stats-grid" id="statsGrid"></div>
-            <div id="dataPreview"></div>
-        </div>
-        
-        <!-- Panneau de statut système (affiché seulement si nécessaire) -->
-        <div class="system-status-panel" id="systemStatus" style="display: none;">
-            <!-- Contenu généré dynamiquement -->
+            <!-- Aperçu des données générées -->
+            <div class="professional-card">
+                <div class="card-header">
+                    <h3 class="card-title">📋 Aperçu des données générées</h3>
+                    <div class="card-badge">OSM + Consommation</div>
+                </div>
+                <div id="dataPreview" class="p-3"></div>
+            </div>
         </div>
     </div>
 
-    <!-- Scripts JavaScript -->
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
-    
-    <!-- Script du prédicteur de bâtiments (nouveau) -->
-    <script src="{{ url_for('static', filename='building_predictor_frontend_fixed.js') }}"></script>
-    
-    <!-- Script d'initialisation personnalisé -->
+
+    <!-- NOUVEAU: Script pour gestion OSM -->
     <script>
-        // Configuration globale pour l'application
-        window.APP_CONFIG = {
-            predictorEnabled: true,
-            realDataAvailable: false, // Sera mis à jour dynamiquement
-            validationEnabled: false, // Sera mis à jour dynamiquement
-            debugMode: false
+        /**
+         * Gestion de l'interface basée sur OpenStreetMap
+         */
+
+        let previewMap = null;
+        let currentZoneData = null;
+        let loadedBuildings = [];
+
+        // Données des villes malaysiennes avec coordonnées
+        const malaysiaCities = {
+            'Kuala Lumpur': { lat: 3.1390, lon: 101.6869, population: 1800000, state: 'Federal Territory' },
+            'George Town': { lat: 5.4164, lon: 100.3327, population: 708000, state: 'Penang' },
+            'Ipoh': { lat: 4.5975, lon: 101.0901, population: 657000, state: 'Perak' },
+            'Shah Alam': { lat: 3.0733, lon: 101.5185, population: 641000, state: 'Selangor' },
+            'Petaling Jaya': { lat: 3.1073, lon: 101.6059, population: 613000, state: 'Selangor' },
+            'Johor Bahru': { lat: 1.4927, lon: 103.7414, population: 497000, state: 'Johor' },
+            'Kota Kinabalu': { lat: 5.9788, lon: 116.0753, population: 452000, state: 'Sabah' },
+            'Kuching': { lat: 1.5533, lon: 110.3592, population: 325000, state: 'Sarawak' },
+            'Ampang Jaya': { lat: 3.1500, lon: 101.7500, population: 315000, state: 'Selangor' },
+            'Klang': { lat: 3.0319, lon: 101.4443, population: 290000, state: 'Selangor' }
         };
-        
-        // Fonction d'initialisation améliorée
-        function initializeApplication() {
-            console.log('🚀 Initialisation de l\'application Malaysia...');
-            
-            // Charger le statut du système
-            loadSystemStatus();
-            
-            // Initialiser l'estimation
-            updateEstimation();
-            
-            // Vérifier la disponibilité du prédicteur
-            checkPredictorAvailability();
-            
-            console.log('✅ Application initialisée');
-        }
-        
-        // Vérifier la disponibilité du prédicteur
-        function checkPredictorAvailability() {
-            // Vérifier toutes les 500ms pendant 10 secondes max
-            let checkCount = 0;
-            const maxChecks = 20;
-            
-            const checkInterval = setInterval(() => {
-                checkCount++;
-                
-                if (window.BuildingPredictorAPI && window.BuildingPredictorAPI.isReady()) {
-                    clearInterval(checkInterval);
-                    console.log('✅ Prédicteur de bâtiments prêt');
-                    updateSystemStatusIndicator('predictor_ready');
-                } else if (checkCount >= maxChecks) {
-                    clearInterval(checkInterval);
-                    console.warn('⚠️ Prédicteur non disponible après 10 secondes');
-                    updateSystemStatusIndicator('predictor_unavailable');
-                }
-            }, 500);
-        }
-        
-        // Charger le statut du système depuis l'API
-        async function loadSystemStatus() {
-            try {
-                const response = await fetch('/api/real-data-status');
-                const data = await response.json();
-                
-                if (data.success && data.status) {
-                    window.APP_CONFIG.realDataAvailable = data.status.real_data_available;
-                    window.APP_CONFIG.validationEnabled = data.status.validation_enabled;
-                    
-                    updateSystemStatusIndicator('system_loaded', data.status);
-                }
-            } catch (error) {
-                console.warn('⚠️ Impossible de charger le statut système:', error);
-                updateSystemStatusIndicator('system_error');
+
+        /**
+         * Initialisation de la carte de prévisualisation
+         */
+        function initializePreviewMap() {
+            if (!previewMap) {
+                previewMap = L.map('previewMap').setView([4.2105, 101.9758], 6); // Centre Malaisie
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(previewMap);
+
+                console.log('✅ Carte de prévisualisation initialisée');
             }
         }
-        
-        // Mettre à jour l'indicateur de statut
-        function updateSystemStatusIndicator(status, statusData = null) {
-            const indicator = document.getElementById('dataStatusIndicator');
-            if (!indicator) return;
+
+        /**
+         * Mise à jour des options selon le type de zone
+         */
+        function updateZoneOptions() {
+            const zoneType = document.getElementById('zoneType').value;
             
-            switch (status) {
-                case 'system_loaded':
-                    if (statusData && statusData.real_data_available) {
-                        indicator.innerHTML = `
-                            <span class="status-badge official">🎯 VRAIES DONNÉES ACTIVES</span>
-                            <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.9;">
-                                Sources officielles Malaysia + Prédicteur intelligent
-                            </div>
-                        `;
-                        document.getElementById('systemStatusIndicator').classList.add('real-data');
-                    } else {
-                        indicator.innerHTML = `
-                            <span class="status-badge estimated">📊 MODE ESTIMATION</span>
-                            <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.9;">
-                                Distribution intelligente + Prédicteur intégré
-                            </div>
-                        `;
+            // Masquer toutes les options
+            document.getElementById('stateOptions').style.display = 'none';
+            document.getElementById('cityOptions').style.display = 'none';
+            document.getElementById('districtOptions').style.display = 'none';
+            document.getElementById('customOptions').style.display = 'none';
+
+            // Afficher les options appropriées
+            switch(zoneType) {
+                case 'state':
+                    document.getElementById('stateOptions').style.display = 'block';
+                    break;
+                case 'city':
+                    document.getElementById('cityOptions').style.display = 'block';
+                    break;
+                case 'district':
+                    document.getElementById('districtOptions').style.display = 'block';
+                    break;
+                case 'custom':
+                    document.getElementById('customOptions').style.display = 'block';
+                    break;
+            }
+
+            updateZoneInfo();
+        }
+
+        /**
+         * Mise à jour des informations de la ville
+         */
+        function updateCityInfo() {
+            const cityName = document.getElementById('selectedCity').value;
+            const cityData = malaysiaCities[cityName];
+            
+            if (cityData) {
+                document.getElementById('zoneNameDisplay').textContent = cityName;
+                document.getElementById('zoneTypeDisplay').textContent = 'Ville';
+                document.getElementById('zonePopulationDisplay').textContent = 
+                    cityData.population.toLocaleString() + ' habitants';
+                document.getElementById('zoneAreaDisplay').textContent = 'Variable selon limites';
+                
+                // Estimation des bâtiments basée sur la population
+                const estimatedBuildings = Math.round(cityData.population * 0.15); // 15% ratio approximatif
+                document.getElementById('estimatedBuildings').textContent = 
+                    estimatedBuildings.toLocaleString();
+                
+                updateEstimation();
+            }
+        }
+
+        /**
+         * Mise à jour générale des informations de zone
+         */
+        function updateZoneInfo() {
+            const zoneType = document.getElementById('zoneType').value;
+            
+            switch(zoneType) {
+                case 'country':
+                    document.getElementById('zoneNameDisplay').textContent = 'Malaisie';
+                    document.getElementById('zoneTypeDisplay').textContent = 'Pays entier';
+                    document.getElementById('zonePopulationDisplay').textContent = '32M habitants';
+                    document.getElementById('estimatedBuildings').textContent = '4.8M (estimation)';
+                    break;
+                case 'city':
+                    updateCityInfo();
+                    break;
+                default:
+                    document.getElementById('zoneNameDisplay').textContent = '-';
+                    document.getElementById('zoneTypeDisplay').textContent = '-';
+                    document.getElementById('zonePopulationDisplay').textContent = '-';
+                    document.getElementById('estimatedBuildings').textContent = '-';
+            }
+        }
+
+        /**
+         * Mise à jour de l'affichage du rayon
+         */
+        function updateRadiusDisplay() {
+            const radius = document.getElementById('customRadius').value;
+            document.getElementById('radiusDisplay').textContent = radius + 'm';
+        }
+
+        /**
+         * Prévisualisation de la zone sélectionnée
+         */
+        function previewZone() {
+            const zoneType = document.getElementById('zoneType').value;
+            
+            if (!previewMap) {
+                initializePreviewMap();
+            }
+
+            updateMapStatus('🔄 Préparation de la prévisualisation...');
+
+            switch(zoneType) {
+                case 'city':
+                    previewCity();
+                    break;
+                case 'state':
+                    previewState();
+                    break;
+                case 'custom':
+                    previewCustomZone();
+                    break;
+                case 'district':
+                    previewDistrict();
+                    break;
+                case 'country':
+                    previewCountry();
+                    break;
+            }
+        }
+
+        /**
+         * Prévisualisation d'une ville
+         */
+        function previewCity() {
+            const cityName = document.getElementById('selectedCity').value;
+            const cityData = malaysiaCities[cityName];
+            
+            if (cityData) {
+                previewMap.setView([cityData.lat, cityData.lon], 12);
+                
+                // Ajouter un marqueur pour la ville
+                L.marker([cityData.lat, cityData.lon])
+                    .addTo(previewMap)
+                    .bindPopup(`
+                        <b>${cityName}</b><br>
+                        Population: ${cityData.population.toLocaleString()}<br>
+                        État: ${cityData.state}
+                    `)
+                    .openPopup();
+
+                currentZoneData = {
+                    type: 'city',
+                    name: cityName,
+                    center: [cityData.lat, cityData.lon],
+                    radius: 15000, // Rayon approximatif d'une ville
+                    ...cityData
+                };
+
+                updateMapStatus(`📍 Ville ${cityName} centrée sur la carte`);
+                
+                // Faire défiler jusqu'à la carte
+                document.getElementById('previewMapContainer').scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start' 
+                });
+            }
+        }
+
+        /**
+         * Prévisualisation d'une zone personnalisée
+         */
+        function previewCustomZone() {
+            const lat = parseFloat(document.getElementById('customLat').value);
+            const lon = parseFloat(document.getElementById('customLon').value);
+            const radius = parseInt(document.getElementById('customRadius').value);
+
+            if (isNaN(lat) || isNaN(lon)) {
+                alert('⚠️ Veuillez saisir des coordonnées valides');
+                return;
+            }
+
+            previewMap.setView([lat, lon], 14);
+            
+            // Ajouter un cercle pour visualiser la zone
+            L.circle([lat, lon], {
+                color: '#3498db',
+                fillColor: '#3498db',
+                fillOpacity: 0.2,
+                radius: radius
+            }).addTo(previewMap);
+
+            currentZoneData = {
+                type: 'custom',
+                name: `Zone personnalisée`,
+                center: [lat, lon],
+                radius: radius
+            };
+
+            updateMapStatus(`📍 Zone personnalisée (${radius}m) centrée`);
+        }
+
+        /**
+         * Mise à jour du statut de la carte
+         */
+        function updateMapStatus(message) {
+            document.getElementById('mapStatus').textContent = message;
+        }
+
+        /**
+         * Chargement des vrais bâtiments depuis OSM
+         */
+        async function loadRealBuildings() {
+            if (!currentZoneData) {
+                alert('⚠️ Veuillez d\'abord prévisualiser une zone');
+                return;
+            }
+
+            updateMapStatus('🔄 Chargement des bâtiments OSM...');
+            updateLoadingProgress(10);
+
+            try {
+                const buildings = await fetchOSMBuildings(currentZoneData);
+                displayBuildingsOnMap(buildings);
+                updateBuildingStats(buildings);
+                updateLoadingProgress(100);
+                updateMapStatus(`✅ ${buildings.length} bâtiments chargés depuis OSM`);
+                
+                // Mettre à jour l'estimation
+                updateEstimationWithRealBuildings(buildings);
+                
+            } catch (error) {
+                console.error('Erreur chargement OSM:', error);
+                updateMapStatus('❌ Erreur lors du chargement OSM');
+                alert('Erreur lors du chargement des données OSM. Vérifiez la connexion.');
+            }
+        }
+
+        /**
+         * Récupération des bâtiments depuis l'API Overpass
+         */
+        async function fetchOSMBuildings(zoneData) {
+            const { center, radius } = zoneData;
+            const [lat, lon] = center;
+
+            updateLoadingProgress(20);
+
+            const query = `
+                [out:json][timeout:60];
+                (
+                    way["building"](around:${radius},${lat},${lon});
+                    relation["building"](around:${radius},${lat},${lon});
+                );
+                out geom;
+            `;
+
+            const response = await fetch('https://overpass-api.de/api/interpreter', {
+                method: 'POST',
+                body: query,
+                headers: { 'Content-Type': 'text/plain' }
+            });
+
+            updateLoadingProgress(60);
+
+            if (!response.ok) {
+                throw new Error(`Erreur HTTP: ${response.status}`);
+            }
+
+            const data = await response.json();
+            updateLoadingProgress(80);
+
+            return data.elements || [];
+        }
+
+        /**
+         * Affichage des bâtiments sur la carte
+         */
+        function displayBuildingsOnMap(buildings) {
+            // Effacer les bâtiments existants
+            previewMap.eachLayer(layer => {
+                if (layer instanceof L.Polygon) {
+                    previewMap.removeLayer(layer);
+                }
+            });
+
+            const buildingColors = {
+                'residential': '#90EE90',
+                'commercial': '#87CEEB',
+                'industrial': '#A9A9A9',
+                'office': '#B0C4DE',
+                'retail': '#87CEFA',
+                'hospital': '#FFB6C1',
+                'school': '#DDA0DD',
+                'hotel': '#FFDF7F',
+                'default': '#D3D3D3'
+            };
+
+            loadedBuildings = buildings;
+            let displayedCount = 0;
+
+            buildings.forEach(building => {
+                if (building.geometry && building.geometry.length > 2) {
+                    try {
+                        const coords = building.geometry.map(point => [point.lat, point.lon]);
+                        const buildingType = getBuildingType(building.tags);
+                        const color = buildingColors[buildingType] || buildingColors.default;
+
+                        const polygon = L.polygon(coords, {
+                            color: '#333',
+                            weight: 1,
+                            fillColor: color,
+                            fillOpacity: 0.7
+                        });
+
+                        polygon.bindPopup(createBuildingPopup(building, buildingType));
+                        polygon.addTo(previewMap);
+                        displayedCount++;
+
+                    } catch (error) {
+                        console.warn('Erreur affichage bâtiment:', error);
+                    }
+                }
+            });
+
+            document.getElementById('loadedBuildingsCount').textContent = displayedCount;
+        }
+
+        /**
+         * Détermination du type de bâtiment OSM
+         */
+        function getBuildingType(tags) {
+            if (!tags || !tags.building) return 'default';
+
+            const buildingType = tags.building.toLowerCase();
+            
+            const typeMapping = {
+                'residential': 'residential',
+                'house': 'residential', 
+                'apartments': 'residential',
+                'commercial': 'commercial',
+                'retail': 'retail',
+                'shop': 'retail',
+                'office': 'office',
+                'industrial': 'industrial',
+                'warehouse': 'industrial',
+                'factory': 'industrial',
+                'hospital': 'hospital',
+                'clinic': 'hospital',
+                'school': 'school',
+                'university': 'school',
+                'hotel': 'hotel',
+                'restaurant': 'commercial'
+            };
+
+            return typeMapping[buildingType] || 'default';
+        }
+
+        /**
+         * Création du popup pour un bâtiment
+         */
+        function createBuildingPopup(building, buildingType) {
+            const tags = building.tags || {};
+            let popup = `<b>Type:</b> ${buildingType}<br>`;
+            
+            if (tags.name) popup += `<b>Nom:</b> ${tags.name}<br>`;
+            if (tags.height) popup += `<b>Hauteur:</b> ${tags.height}<br>`;
+            if (tags['building:levels']) popup += `<b>Étages:</b> ${tags['building:levels']}<br>`;
+            if (tags['addr:street']) popup += `<b>Rue:</b> ${tags['addr:street']}<br>`;
+            
+            popup += `<b>ID OSM:</b> ${building.id}`;
+            
+            return popup;
+        }
+
+        /**
+         * Mise à jour des statistiques des bâtiments
+         */
+        function updateBuildingStats(buildings) {
+            const stats = {};
+            
+            buildings.forEach(building => {
+                const type = getBuildingType(building.tags);
+                stats[type] = (stats[type] || 0) + 1;
+            });
+
+            const statsContainer = document.getElementById('buildingTypesStats');
+            let statsHTML = '';
+
+            // Trier par nombre décroissant
+            const sortedStats = Object.entries(stats).sort(([,a], [,b]) => b - a);
+
+            sortedStats.forEach(([type, count]) => {
+                const percentage = ((count / buildings.length) * 100).toFixed(1);
+                statsHTML += `
+                    <div class="data-item">
+                        <span class="data-label">${type}:</span>
+                        <span class="data-value">${count} (${percentage}%)</span>
+                    </div>
+                `;
+            });
+
+            statsContainer.innerHTML = statsHTML;
+
+            // Mettre à jour la répartition dans l'estimation
+            updateBuildingTypesBreakdown(stats);
+        }
+
+        /**
+         * Mise à jour de la répartition par type de bâtiment
+         */
+        function updateBuildingTypesBreakdown(stats) {
+            const container = document.getElementById('buildingTypesBreakdown');
+            let html = '';
+
+            Object.entries(stats).forEach(([type, count]) => {
+                html += `
+                    <div class="data-card">
+                        <div class="data-card-header">
+                            <div class="data-card-title">${type}</div>
+                        </div>
+                        <div class="data-card-body">
+                            <div class="stat-value">${count}</div>
+                            <div class="stat-label">bâtiments</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        /**
+         * Mise à jour de l'estimation avec les vrais bâtiments
+         */
+        function updateEstimationWithRealBuildings(buildings) {
+            const buildingCount = buildings.length;
+            
+            // Calculer les observations totales
+            const startDate = new Date(document.getElementById('startDate').value);
+            const endDate = new Date(document.getElementById('endDate').value);
+            const freq = document.getElementById('freq').value;
+            
+            const timePoints = calculateTimePoints(startDate, endDate, freq);
+            const totalObservations = buildingCount * timePoints;
+            
+            // Estimer la taille du fichier
+            const avgBytesPerRecord = 150; // JSON avec métadonnées
+            const fileSizeBytes = totalObservations * avgBytesPerRecord;
+            const fileSizeFormatted = formatFileSize(fileSizeBytes);
+            
+            // Estimer le temps de génération
+            const generationTime = estimateGenerationTime(buildingCount, timePoints);
+            
+            // Mettre à jour l'affichage
+            document.getElementById('totalBuildings').textContent = buildingCount.toLocaleString();
+            document.getElementById('totalObservations').textContent = totalObservations.toLocaleString();
+            document.getElementById('fileSize').textContent = fileSizeFormatted;
+            document.getElementById('generationTime').textContent = generationTime;
+        }
+
+        /**
+         * Calcul du nombre de points temporels
+         */
+        function calculateTimePoints(startDate, endDate, freq) {
+            const diffMs = endDate - startDate;
+            const diffDays = diffMs / (1000 * 60 * 60 * 24);
+            
+            const freqMultipliers = {
+                '5T': 288,    // 288 points par jour
+                '15T': 96,    // 96 points par jour
+                '30T': 48,    // 48 points par jour
+                '1H': 24,     // 24 points par jour
+                '2H': 12,     // 12 points par jour
+                '6H': 4,      // 4 points par jour
+                '12H': 2,     // 2 points par jour
+                '1D': 1,      // 1 point par jour
+                '1W': 1/7,    // 1 point par semaine
+                '1M': 1/30    // 1 point par mois
+            };
+            
+            return Math.ceil(diffDays * (freqMultipliers[freq] || 48));
+        }
+
+        /**
+         * Formatage de la taille de fichier
+         */
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+        }
+
+        /**
+         * Estimation du temps de génération
+         */
+        function estimateGenerationTime(buildings, timePoints) {
+            const totalRecords = buildings * timePoints;
+            
+            if (totalRecords < 10000) return '< 10s';
+            if (totalRecords < 100000) return '< 1min';
+            if (totalRecords < 500000) return '1-3min';
+            if (totalRecords < 1000000) return '3-5min';
+            if (totalRecords < 5000000) return '5-15min';
+            return '15+ min';
+        }
+
+        /**
+         * Mise à jour générale de l'estimation
+         */
+        function updateEstimation() {
+            // Si on a des bâtiments chargés, utiliser les vrais nombres
+            if (loadedBuildings.length > 0) {
+                updateEstimationWithRealBuildings(loadedBuildings);
+                return;
+            }
+
+            // Sinon, utiliser les estimations basées sur la zone
+            const zoneType = document.getElementById('zoneType').value;
+            let estimatedBuildings = 0;
+
+            switch(zoneType) {
+                case 'country':
+                    estimatedBuildings = 4800000;
+                    break;
+                case 'city':
+                    const cityName = document.getElementById('selectedCity').value;
+                    const cityData = malaysiaCities[cityName];
+                    if (cityData) {
+                        estimatedBuildings = Math.round(cityData.population * 0.15);
                     }
                     break;
-                    
-                case 'predictor_ready':
-                    // Ajouter une note sur le prédicteur
-                    const currentContent = indicator.innerHTML;
-                    if (!currentContent.includes('Prédicteur')) {
-                        indicator.innerHTML = currentContent.replace(
-                            'Sources officielles Malaysia',
-                            'Sources officielles Malaysia + Prédicteur intelligent'
-                        ).replace(
-                            'Distribution intelligente',
-                            'Distribution intelligente + Prédicteur intégré'
-                        );
-                    }
+                case 'custom':
+                    const radius = parseInt(document.getElementById('customRadius').value) || 1000;
+                    estimatedBuildings = Math.round((radius / 1000) * (radius / 1000) * 100);
                     break;
-                    
-                case 'predictor_unavailable':
-                    console.log('ℹ️ Fonctionnement sans prédicteur frontend');
-                    break;
-                    
-                case 'system_error':
-                    indicator.innerHTML = `
-                        <span class="status-badge estimated">⚠️ MODE DÉGRADÉ</span>
-                        <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.9;">
-                            Fonctionnement basique - Vérifiez la connexion
+                default:
+                    estimatedBuildings = 1000;
+            }
+
+            // Calculer avec l'estimation
+            const startDate = new Date(document.getElementById('startDate').value);
+            const endDate = new Date(document.getElementById('endDate').value);
+            const freq = document.getElementById('freq').value;
+            
+            const timePoints = calculateTimePoints(startDate, endDate, freq);
+            const totalObservations = estimatedBuildings * timePoints;
+            
+            const avgBytesPerRecord = 150;
+            const fileSizeBytes = totalObservations * avgBytesPerRecord;
+            const fileSizeFormatted = formatFileSize(fileSizeBytes);
+            
+            const generationTime = estimateGenerationTime(estimatedBuildings, timePoints);
+            
+            document.getElementById('totalBuildings').textContent = estimatedBuildings.toLocaleString() + ' (est.)';
+            document.getElementById('totalObservations').textContent = totalObservations.toLocaleString();
+            document.getElementById('fileSize').textContent = fileSizeFormatted;
+            document.getElementById('generationTime').textContent = generationTime;
+        }
+
+        /**
+         * Mise à jour de la barre de progression
+         */
+        function updateLoadingProgress(percentage) {
+            const progressBar = document.getElementById('loadingProgress');
+            if (progressBar) {
+                progressBar.style.width = percentage + '%';
+            }
+        }
+
+        /**
+         * Génération des données depuis OSM
+         */
+        async function generateFromOSM() {
+            if (loadedBuildings.length === 0) {
+                if (confirm('🏗️ Aucun bâtiment OSM chargé. Voulez-vous d\'abord charger les bâtiments réels ?')) {
+                    await loadRealBuildings();
+                }
+                
+                if (loadedBuildings.length === 0) {
+                    alert('⚠️ Impossible de générer sans bâtiments. Chargez d\'abord les données OSM.');
+                    return;
+                }
+            }
+
+            showLoading('🏗️ Génération des données de consommation électrique...');
+            updateLoadingStatus('Préparation des bâtiments OSM...');
+
+            try {
+                // Préparer les données pour l'API
+                const requestData = {
+                    zone_data: currentZoneData,
+                    buildings_osm: loadedBuildings,
+                    start_date: document.getElementById('startDate').value,
+                    end_date: document.getElementById('endDate').value,
+                    freq: document.getElementById('freq').value,
+                    generate_consumption: true
+                };
+
+                updateLoadingStatus('Envoi des données au serveur...');
+
+                // Appeler l'API de génération
+                const response = await fetch('/generate-from-osm', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Erreur serveur: ${response.status}`);
+                }
+
+                updateLoadingStatus('Traitement des données...');
+                const result = await response.json();
+
+                hideLoading();
+                showResults(result);
+
+            } catch (error) {
+                hideLoading();
+                console.error('Erreur génération OSM:', error);
+                showAlert('Erreur lors de la génération: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Téléchargement direct depuis OSM
+         */
+        async function downloadFromOSM() {
+            await generateFromOSM();
+            // Le téléchargement sera déclenché automatiquement par le serveur
+        }
+
+        /**
+         * Aperçu des données OSM
+         */
+        function previewOSMData() {
+            if (loadedBuildings.length === 0) {
+                alert('⚠️ Chargez d\'abord les bâtiments OSM pour voir l\'aperçu');
+                return;
+            }
+
+            // Afficher un aperçu des 10 premiers bâtiments
+            const preview = loadedBuildings.slice(0, 10).map(building => ({
+                id: building.id,
+                type: getBuildingType(building.tags),
+                tags: building.tags
+            }));
+
+            console.log('Aperçu des bâtiments OSM:', preview);
+            
+            const previewWindow = window.open('', '_blank');
+            previewWindow.document.write(`
+                <html>
+                <head><title>Aperçu Bâtiments OSM</title></head>
+                <body>
+                    <h2>Aperçu des ${loadedBuildings.length} bâtiments chargés</h2>
+                    <pre>${JSON.stringify(preview, null, 2)}</pre>
+                </body>
+                </html>
+            `);
+        }
+
+        /**
+         * Fonctions utilitaires pour l'interface
+         */
+        function showLoading(message) {
+            document.getElementById('loading').style.display = 'flex';
+            updateLoadingStatus(message);
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function updateLoadingStatus(message) {
+            const statusElement = document.getElementById('loadingStatus');
+            if (statusElement) {
+                statusElement.textContent = message;
+            }
+        }
+
+        function showAlert(message, type = 'info') {
+            const alertsContainer = document.getElementById('alerts');
+            if (!alertsContainer) return;
+
+            const alertTypes = {
+                'success': 'alert-success',
+                'warning': 'alert-warning',
+                'error': 'alert-error',
+                'info': 'alert-info'
+            };
+
+            const alertClass = alertTypes[type] || alertTypes['info'];
+            const icon = type === 'success' ? '✅' : type === 'warning' ? '⚠️' : type === 'error' ? '❌' : 'ℹ️';
+
+            alertsContainer.innerHTML = `
+                <div class="alert ${alertClass}">
+                    <div class="alert-icon">${icon}</div>
+                    <div>${message}</div>
+                </div>
+            `;
+        }
+
+        function showResults(data) {
+            const resultsDiv = document.getElementById('results');
+            if (!resultsDiv) return;
+
+            resultsDiv.style.display = 'block';
+            resultsDiv.classList.add('fade-in');
+
+            // Afficher les statistiques finales
+            showFinalStats(data);
+
+            // Afficher l'aperçu des données
+            showDataPreview(data);
+
+            showAlert('✅ Données générées avec succès à partir d\'OpenStreetMap', 'success');
+        }
+
+        function showFinalStats(data) {
+            // Implementation des statistiques finales
+            if (data.stats) {
+                const statsGrid = document.getElementById('finalStatsGrid');
+                if (statsGrid) {
+                    statsGrid.innerHTML = `
+                        <div class="stat-card">
+                            <div class="stat-value">${data.stats.buildings_count || 0}</div>
+                            <div class="stat-label">Bâtiments traités</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${data.stats.total_records || 0}</div>
+                            <div class="stat-label">Enregistrements générés</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${data.stats.unique_locations || 0}</div>
+                            <div class="stat-label">Zones couvertes</div>
                         </div>
                     `;
-                    break;
-            }
-        }
-        
-        // Test de connectivité API (fonction améliorée)
-        async function testAPIConnectivity() {
-            console.log('🔗 Test de connectivité API étendu...');
-            
-            const endpoints = [
-                '/api/stats',
-                '/api/real-data-status',
-                '/api/predictor/stats',
-                '/sample'
-            ];
-            
-            const results = {};
-            
-            for (const endpoint of endpoints) {
-                try {
-                    const response = await fetch(endpoint);
-                    results[endpoint] = {
-                        status: response.status,
-                        ok: response.ok,
-                        available: response.ok
-                    };
-                } catch (error) {
-                    results[endpoint] = {
-                        status: 'ERROR',
-                        ok: false,
-                        available: false,
-                        error: error.message
-                    };
                 }
             }
-            
-            console.table(results);
-            return results;
         }
-        
-        // Diagnostic avancé de l'application
-        function diagnosticApplication() {
-            console.log('\n🔍 DIAGNOSTIC COMPLET DE L\'APPLICATION');
-            console.log('=' .repeat(50));
+
+        function showDataPreview(data) {
+            // Implementation de l'aperçu des données
+            const previewDiv = document.getElementById('dataPreview');
+            if (previewDiv && data.sample_data) {
+                previewDiv.innerHTML = `
+                    <h4>Échantillon des données générées</h4>
+                    <pre>${JSON.stringify(data.sample_data.slice(0, 5), null, 2)}</pre>
+                `;
+            }
+        }
+
+        /**
+         * Initialisation de l'interface
+         */
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 Interface OSM Zone Selector initialisée');
             
-            // Statut général
-            console.log('Configuration:', window.APP_CONFIG);
+            // Initialiser la carte
+            initializePreviewMap();
             
-            // Éléments DOM critiques
-            const criticalElements = [
-                'numBuildings', 'locationMode', 'estimationCard', 'systemStatusIndicator',
-                'buildingPredictionPanelFixed', 'dataStatusIndicator'
-            ];
+            // Initialiser les informations de zone
+            updateZoneInfo();
+            updateEstimation();
             
-            console.log('\nÉléments DOM:');
-            criticalElements.forEach(id => {
-                const element = document.getElementById(id);
-                console.log(`  ${id}: ${element ? '✅' : '❌'}`);
+            // Configuration des événements
+            document.getElementById('loadRealBuildings').addEventListener('click', loadRealBuildings);
+            document.getElementById('centerOnZone').addEventListener('click', () => {
+                if (currentZoneData) {
+                    previewMap.setView(currentZoneData.center, 12);
+                }
+            });
+            document.getElementById('clearPreview').addEventListener('click', () => {
+                previewMap.eachLayer(layer => {
+                    if (layer instanceof L.Polygon || layer instanceof L.Marker || layer instanceof L.Circle) {
+                        previewMap.removeLayer(layer);
+                    }
+                });
+                loadedBuildings = [];
+                document.getElementById('loadedBuildingsCount').textContent = '0';
+                updateMapStatus('Carte effacée');
             });
             
-            // API disponibles
-            console.log('\nAPIs disponibles:');
-            console.log(`  Script principal: ${typeof window.updateEstimation === 'function' ? '✅' : '❌'}`);
-            console.log(`  Prédicteur: ${window.BuildingPredictorAPI ? '✅' : '❌'}`);
-            console.log(`  Prédicteur prêt: ${window.BuildingPredictorAPI?.isReady() ? '✅' : '❌'}`);
-            
-            // Test prédicteur si disponible
-            if (window.BuildingPredictorAPI?.isReady()) {
-                const stats = window.BuildingPredictorAPI.getStats();
-                console.log('\nStatistiques prédicteur:', stats);
-            }
-            
-            return {
-                config: window.APP_CONFIG,
-                domElements: criticalElements.map(id => ({
-                    id, 
-                    available: !!document.getElementById(id)
-                })),
-                apis: {
-                    mainScript: typeof window.updateEstimation === 'function',
-                    predictor: !!window.BuildingPredictorAPI,
-                    predictorReady: window.BuildingPredictorAPI?.isReady() || false
-                }
-            };
-        }
-        
-        // Exposer les fonctions de débogage
-        window.diagnosticApplication = diagnosticApplication;
-        window.testAPIConnectivity = testAPIConnectivity;
-        window.loadSystemStatus = loadSystemStatus;
-        
-        // Initialisation au chargement de la page
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initializeApplication);
-        } else {
-            setTimeout(initializeApplication, 100);
-        }
-        
-        // Message de bienvenue dans la console
+            console.log('✅ Interface prête pour sélection de zones OSM');
+        });
+
+        // Message de bienvenue
         console.log(`
-🇲🇾 GÉNÉRATEUR ÉLECTRICITÉ MALAYSIA - VERSION INTÉGRÉE
-====================================================
-✅ Interface principale chargée
-🔮 Prédicteur intelligent intégré
-🎯 Support vraies données officielles Malaysia
-🔧 Outils de diagnostic disponibles
+🗺️ MALAYSIA OSM ZONE SELECTOR - INTERFACE CHARGÉE
+=================================================
+✅ Sélection de zones géographiques (pays, état, ville, quartier, personnalisée)
+🏗️ Chargement automatique des vrais bâtiments OpenStreetMap
+📊 Estimation temps réel basée sur données réelles
+⏰ Conservation de l'horodatage et fréquences existantes
+🔧 Génération avec vos règles de consommation électrique
 
-Fonctions de débogage:
-- diagnosticApplication() - Diagnostic complet
-- testAPIConnectivity() - Test des APIs
-- window.BuildingPredictorAPI - API du prédicteur
+Nouvelle approche:
+1. Sélectionner une zone géographique
+2. Prévisualiser sur la carte
+3. Charger les vrais bâtiments OSM
+4. Générer les données de consommation
 
-Prêt à générer des données pour Malaysia! 🚀
+Prêt pour la génération basée sur OpenStreetMap ! 🚀
         `);
     </script>
 </body>

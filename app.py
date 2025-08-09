@@ -14,6 +14,8 @@ import uuid
 import os
 import json
 import logging
+from osm_generation_route import add_osm_routes
+
 
 # Configuration du logging pour tracer les operations
 logging.basicConfig(level=logging.INFO)
