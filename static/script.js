@@ -1,1080 +1,1027 @@
-// script.js - Version corrigée pour le générateur de données électriques Malaysia
-// Corrige les problèmes d'affichage des résultats
+/**
+ * SCRIPT PRINCIPAL - GÉNÉRATEUR DE DONNÉES MALAYSIA
+ * Fichier: static/script.js
+ * 
+ * Ce fichier gère l'interface utilisateur principale et l'affichage des données
+ * Correctif des problèmes d'aperçu des données et de cartographie
+ */
 
-// Variables globales
-let malaysiaData = {};
-let systemCapabilities = {};
+// ==================== CONFIGURATION GLOBALE ====================
 
-// Charger les données au démarrage
-window.onload = function() {
-    console.log('🚀 Initialisation de l\'application Malaysia...');
-    loadMalaysiaData();
-    loadSystemStatus();
-    updateEstimation();
+// Variables globales pour l'état de l'application
+let currentZoneData = null;
+let loadedBuildings = [];
+let previewMap = null;
+let buildingMarkers = [];
+let malaysiaCitiesData = {};
+
+// Configuration API
+const API_CONFIG = {
+    generateUrl: '/generate',
+    osmUrl: '/generate-from-osm',
+    timeout: 300000, // 5 minutes
+    retryAttempts: 3
 };
 
-// ==================== CHARGEMENT DES DONNÉES ====================
+// ==================== INITIALISATION ====================
 
-async function loadMalaysiaData() {
-    try {
-        console.log('🇲🇾 Chargement des données Malaysia...');
-        const response = await fetch('/api/stats');
-        const data = await response.json();
-        
-        if (data.success && data.malaysia_locations) {
-            malaysiaData = data.malaysia_locations;
-            populateFilterOptions();
-            console.log(`✅ ${Object.keys(malaysiaData).length} villes chargées`);
-        } else {
-            console.warn('⚠️ Erreur API stats, utilisation données de base');
-            useFallbackData();
-        }
-    } catch (error) {
-        console.error('❌ Erreur chargement Malaysia data:', error);
-        useFallbackData();
-    }
-}
+/**
+ * Initialise l'application au chargement de la page
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Initialisation de l\'application Malaysia Generator...');
+    
+    // Charger les données des villes malaysiennes
+    loadMalaysiaCitiesData();
+    
+    // Initialiser les écouteurs d'événements
+    initEventListeners();
+    
+    // Initialiser la carte de prévisualisation
+    initPreviewMap();
+    
+    // Valider l'interface utilisateur
+    validateInterface();
+    
+    console.log('✅ Application initialisée avec succès');
+});
 
-function useFallbackData() {
-    malaysiaData = {
-        'Kuala Lumpur': {'population': 1800000, 'state': 'Federal Territory', 'region': 'Central'},
-        'George Town': {'population': 708000, 'state': 'Penang', 'region': 'Northern'},
-        'Johor Bahru': {'population': 497000, 'state': 'Johor', 'region': 'Southern'},
-        'Ipoh': {'population': 657000, 'state': 'Perak', 'region': 'Northern'},
-        'Shah Alam': {'population': 641000, 'state': 'Selangor', 'region': 'Central'}
+/**
+ * Charge les données des villes malaysiennes
+ */
+function loadMalaysiaCitiesData() {
+    malaysiaCitiesData = {
+        'Kuala Lumpur': { lat: 3.1390, lon: 101.6869, population: 1800000, state: 'Federal Territory' },
+        'George Town': { lat: 5.4164, lon: 100.3327, population: 708000, state: 'Penang' },
+        'Ipoh': { lat: 4.5975, lon: 101.0901, population: 657000, state: 'Perak' },
+        'Shah Alam': { lat: 3.0733, lon: 101.5185, population: 641000, state: 'Selangor' },
+        'Petaling Jaya': { lat: 3.1073, lon: 101.6059, population: 613000, state: 'Selangor' },
+        'Johor Bahru': { lat: 1.4927, lon: 103.7414, population: 497000, state: 'Johor' },
+        'Kota Kinabalu': { lat: 5.9788, lon: 116.0753, population: 452000, state: 'Sabah' },
+        'Kuching': { lat: 1.5533, lon: 110.3592, population: 325000, state: 'Sarawak' }
     };
-    populateFilterOptions();
-    console.log('⚠️ Utilisation données de fallback');
+    
+    console.log(`📍 ${Object.keys(malaysiaCitiesData).length} villes malaysiennes chargées`);
 }
 
-async function loadSystemStatus() {
+/**
+ * Initialise tous les écouteurs d'événements
+ */
+function initEventListeners() {
+    // Bouton de génération principal
+    const generateBtn = document.getElementById('generateBtn');
+    if (generateBtn) {
+        generateBtn.addEventListener('click', handleGenerate);
+    }
+    
+    // Boutons de la carte
+    const loadBuildingsBtn = document.getElementById('loadRealBuildings');
+    if (loadBuildingsBtn) {
+        loadBuildingsBtn.addEventListener('click', loadRealBuildings);
+    }
+    
+    const centerBtn = document.getElementById('centerOnZone');
+    if (centerBtn) {
+        centerBtn.addEventListener('click', centerOnSelectedZone);
+    }
+    
+    const clearBtn = document.getElementById('clearPreview');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', clearMapPreview);
+    }
+    
+    // Sélection de zone
+    const zoneSelect = document.getElementById('zoneSelect');
+    if (zoneSelect) {
+        zoneSelect.addEventListener('change', handleZoneSelection);
+    }
+    
+    console.log('👂 Écouteurs d\'événements initialisés');
+}
+
+// ==================== GESTION DE LA CARTE ====================
+
+/**
+ * Initialise la carte de prévisualisation Leaflet
+ */
+function initPreviewMap() {
     try {
-        const response = await fetch('/api/real-data-status');
-        const data = await response.json();
-        
-        if (data.success && data.status) {
-            systemCapabilities = data.status;
-            updateSystemStatusUI(data.status);
-        } else {
-            setDefaultCapabilities();
+        const mapContainer = document.getElementById('previewMap');
+        if (!mapContainer) {
+            console.warn('⚠️ Conteneur de carte non trouvé');
+            return;
         }
+        
+        // Créer la carte centrée sur la Malaisie
+        previewMap = L.map('previewMap').setView([4.2105, 101.9758], 6);
+        
+        // Ajouter le layer de tuiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(previewMap);
+        
+        // Ajouter les marqueurs des villes principales
+        addCityMarkers();
+        
+        updateMapStatus('Carte initialisée - Sélectionnez une zone');
+        console.log('🗺️ Carte de prévisualisation initialisée');
+        
     } catch (error) {
-        console.warn('⚠️ Impossible de charger le statut système:', error);
-        setDefaultCapabilities();
+        console.error('❌ Erreur initialisation carte:', error);
+        updateMapStatus('Erreur lors de l\'initialisation de la carte');
     }
 }
 
-function setDefaultCapabilities() {
-    systemCapabilities = {
-        real_data_available: false,
-        validation_enabled: false,
-        building_distributor_available: false
+/**
+ * Ajoute les marqueurs des principales villes malaysiennes
+ */
+function addCityMarkers() {
+    Object.entries(malaysiaCitiesData).forEach(([cityName, cityData]) => {
+        const marker = L.marker([cityData.lat, cityData.lon])
+            .addTo(previewMap)
+            .bindPopup(`
+                <div style="font-family: Arial; padding: 10px;">
+                    <h4 style="margin: 0 0 10px 0; color: #2c5aa0;">${cityName}</h4>
+                    <p style="margin: 5px 0;"><strong>État:</strong> ${cityData.state}</p>
+                    <p style="margin: 5px 0;"><strong>Population:</strong> ${cityData.population.toLocaleString()}</p>
+                    <p style="margin: 5px 0;"><strong>Coordonnées:</strong> ${cityData.lat.toFixed(4)}, ${cityData.lon.toFixed(4)}</p>
+                </div>
+            `);
+        
+        // Événement de clic pour sélectionner automatiquement la ville
+        marker.on('click', function() {
+            selectCity(cityName, cityData);
+        });
+    });
+}
+
+/**
+ * Sélectionne une ville et met à jour l'interface
+ */
+function selectCity(cityName, cityData) {
+    currentZoneData = {
+        name: cityName,
+        type: 'city',
+        lat: cityData.lat,
+        lon: cityData.lon,
+        population: cityData.population,
+        state: cityData.state
     };
-    updateSystemStatusUI(systemCapabilities);
+    
+    // Mettre à jour l'affichage des données de zone
+    updateZoneDisplay();
+    
+    // Centrer la carte sur la ville
+    previewMap.setView([cityData.lat, cityData.lon], 12);
+    
+    console.log(`📍 Zone sélectionnée: ${cityName}`);
 }
 
-// ==================== MISE À JOUR UI ====================
-
-function updateSystemStatusUI(status) {
-    console.log('🎨 Mise à jour UI avec statut:', status);
-    
-    const statusIndicator = document.getElementById('dataStatusIndicator');
-    if (statusIndicator) {
-        if (status.real_data_available) {
-            statusIndicator.innerHTML = `
-                <div class="real-data-indicator">
-                    🎯 VRAIES DONNÉES OFFICIELLES MALAYSIA ACTIVÉES
-                    <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.9;">
-                        Sources: Ministry of Health, Education, Tourism Malaysia
-                    </div>
-                </div>
-            `;
-        } else {
-            statusIndicator.innerHTML = `
-                <div class="estimation-indicator">
-                    📊 MODE ESTIMATION - Distribution intelligente selon villes
-                    <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.9;">
-                        Basé sur population et caractéristiques urbaines
-                    </div>
-                </div>
-            `;
-        }
-    }
-}
-
-// ==================== FONCTIONS DE FILTRAGE ====================
-
-function populateFilterOptions() {
-    const regionSelect = document.getElementById('filterRegion');
-    if (!regionSelect || !malaysiaData) return;
-    
-    try {
-        const regions = [...new Set(Object.values(malaysiaData).map(loc => loc.region))];
-        regionSelect.innerHTML = '<option value="all">Toutes les régions</option>';
-        
-        regions.forEach(region => {
-            const option = document.createElement('option');
-            option.value = region;
-            option.textContent = region;
-            regionSelect.appendChild(option);
-        });
-        
-        console.log(`✅ ${regions.length} régions ajoutées`);
-    } catch (error) {
-        console.error('❌ Erreur peuplement filtres:', error);
-    }
-}
-
-function toggleLocationMode() {
-    const mode = document.getElementById('locationMode')?.value;
-    const filterSection = document.getElementById('filterSection');
-    const customSection = document.getElementById('customSection');
-    
-    if (filterSection) filterSection.style.display = mode === 'filter' ? 'block' : 'none';
-    if (customSection) customSection.style.display = mode === 'custom' ? 'block' : 'none';
-}
-
-function updateStateOptions() {
-    const selectedRegion = document.getElementById('filterRegion')?.value;
-    const stateSelect = document.getElementById('filterState');
-    const citySelect = document.getElementById('filterCity');
-    
-    if (!stateSelect || !citySelect || !malaysiaData) return;
-    
-    stateSelect.innerHTML = '<option value="all">Tous les états</option>';
-    citySelect.innerHTML = '<option value="all">Toutes les villes</option>';
-    
-    try {
-        let states;
-        if (selectedRegion === 'all') {
-            states = [...new Set(Object.values(malaysiaData).map(loc => loc.state))];
-        } else {
-            states = [...new Set(
-                Object.values(malaysiaData)
-                    .filter(loc => loc.region === selectedRegion)
-                    .map(loc => loc.state)
-            )];
-        }
-        
-        states.forEach(state => {
-            const option = document.createElement('option');
-            option.value = state;
-            option.textContent = state;
-            stateSelect.appendChild(option);
-        });
-    } catch (error) {
-        console.error('❌ Erreur mise à jour états:', error);
-    }
-}
-
-function updateCityOptions() {
-    const selectedRegion = document.getElementById('filterRegion')?.value;
-    const selectedState = document.getElementById('filterState')?.value;
-    const citySelect = document.getElementById('filterCity');
-    
-    if (!citySelect || !malaysiaData) return;
-    
-    citySelect.innerHTML = '<option value="all">Toutes les villes</option>';
-    
-    try {
-        let filteredCities = Object.entries(malaysiaData);
-        
-        if (selectedRegion !== 'all') {
-            filteredCities = filteredCities.filter(([name, info]) => info.region === selectedRegion);
-        }
-        
-        if (selectedState !== 'all') {
-            filteredCities = filteredCities.filter(([name, info]) => info.state === selectedState);
-        }
-        
-        filteredCities
-            .sort((a, b) => b[1].population - a[1].population)
-            .forEach(([name, info]) => {
-                const option = document.createElement('option');
-                option.value = name;
-                option.textContent = `${name} (${info.population.toLocaleString()} hab.)`;
-                citySelect.appendChild(option);
-            });
-    } catch (error) {
-        console.error('❌ Erreur mise à jour villes:', error);
-    }
-}
-
-function updatePopulationInputs() {
-    const range = document.getElementById('populationRange')?.value;
-    const customRange = document.getElementById('customPopulationRange');
-    const popMin = document.getElementById('popMin');
-    const popMax = document.getElementById('popMax');
-    
-    if (customRange) {
-        customRange.style.display = range === 'custom' ? 'block' : 'none';
-    }
-    
-    if (popMin && popMax) {
-        switch(range) {
-            case 'large':
-                popMin.value = 500000;
-                popMax.value = '';
-                break;
-            case 'medium':
-                popMin.value = 200000;
-                popMax.value = 500000;
-                break;
-            case 'small':
-                popMin.value = '';
-                popMax.value = 200000;
-                break;
-            default:
-                if (range !== 'custom') {
-                    popMin.value = '';
-                    popMax.value = '';
-                }
-        }
-    }
-}
-
-// ==================== ESTIMATION ====================
-
-function updateEstimation() {
-    const numBuildings = parseInt(document.getElementById('numBuildings')?.value) || 0;
-    const startDate = document.getElementById('startDate')?.value;
-    const endDate = document.getElementById('endDate')?.value;
-    const freq = document.getElementById('freq')?.value;
-    
-    if (numBuildings === 0 || !startDate || !endDate) {
+/**
+ * Charge les vrais bâtiments depuis OSM
+ */
+async function loadRealBuildings() {
+    if (!currentZoneData) {
+        showAlert('Veuillez d\'abord sélectionner une zone', 'warning');
         return;
     }
     
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffTime = Math.abs(end - start);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    let observationsPerBuilding;
-    let freqDescription;
-    
-    switch(freq) {
-        case '5T':
-            observationsPerBuilding = diffDays * 288;
-            freqDescription = "Très haute résolution";
-            break;
-        case '15T':
-            observationsPerBuilding = diffDays * 96;
-            freqDescription = "Haute résolution";
-            break;
-        case '30T':
-            observationsPerBuilding = diffDays * 48;
-            freqDescription = "Résolution standard";
-            break;
-        case '1H':
-            observationsPerBuilding = diffDays * 24;
-            freqDescription = "Résolution horaire";
-            break;
-        case '2H':
-            observationsPerBuilding = diffDays * 12;
-            freqDescription = "Résolution bi-horaire";
-            break;
-        case '6H':
-            observationsPerBuilding = diffDays * 4;
-            freqDescription = "4 fois par jour";
-            break;
-        case '12H':
-            observationsPerBuilding = diffDays * 2;
-            freqDescription = "2 fois par jour";
-            break;
-        case '1D':
-            observationsPerBuilding = diffDays * 1;
-            freqDescription = "Quotidien";
-            break;
-        case '1W':
-            observationsPerBuilding = Math.ceil(diffDays / 7);
-            freqDescription = "Hebdomadaire";
-            break;
-        case '1M':
-            observationsPerBuilding = Math.ceil(diffDays / 30);
-            freqDescription = "Mensuel";
-            break;
-        default:
-            observationsPerBuilding = diffDays * 48;
-            freqDescription = "Résolution par défaut";
+    try {
+        updateMapStatus('🏗️ Chargement des bâtiments OSM...');
+        showLoading('Récupération des données OpenStreetMap');
+        
+        // Requête Overpass API pour récupérer les bâtiments
+        const overpassQuery = `
+            [out:json][timeout:25];
+            (
+                way["building"]
+                (${currentZoneData.lat - 0.01}, ${currentZoneData.lon - 0.01}, ${currentZoneData.lat + 0.01}, ${currentZoneData.lon + 0.01});
+                relation["building"]
+                (${currentZoneData.lat - 0.01}, ${currentZoneData.lon - 0.01}, ${currentZoneData.lat + 0.01}, ${currentZoneData.lon + 0.01});
+            );
+            out geom;
+        `;
+        
+        const response = await fetch('https://overpass-api.de/api/interpreter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: overpassQuery
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Erreur API Overpass: ${response.status}`);
+        }
+        
+        const osmData = await response.json();
+        
+        // Traiter les données OSM
+        loadedBuildings = processOSMBuildings(osmData.elements);
+        
+        // Afficher les bâtiments sur la carte
+        displayBuildingsOnMap(loadedBuildings);
+        
+        // Mettre à jour les statistiques
+        updateBuildingStats();
+        
+        hideLoading();
+        updateMapStatus(`✅ ${loadedBuildings.length} bâtiments chargés avec succès`);
+        
+        console.log(`🏗️ ${loadedBuildings.length} bâtiments OSM chargés`);
+        
+    } catch (error) {
+        hideLoading();
+        console.error('❌ Erreur chargement OSM:', error);
+        showAlert(`Erreur lors du chargement des bâtiments: ${error.message}`, 'error');
+        updateMapStatus('❌ Échec du chargement des bâtiments');
     }
+}
+
+/**
+ * Traite les données brutes OSM en format utilisable
+ */
+function processOSMBuildings(elements) {
+    const buildings = [];
     
-    const totalObservations = numBuildings * observationsPerBuilding;
-    const bytesPerObservation = 80;
-    const fileSizeMB = (totalObservations * bytesPerObservation) / (1024 * 1024);
+    elements.forEach((element, index) => {
+        if (element.geometry && element.geometry.length > 0) {
+            const building = {
+                id: element.id || `generated_${index}`,
+                type: element.tags?.building || 'residential',
+                tags: element.tags || {},
+                geometry: element.geometry,
+                // Ajouter des métadonnées pour la génération
+                location: currentZoneData.name,
+                state: currentZoneData.state,
+                estimated_area: calculateBuildingArea(element.geometry),
+                building_class: classifyBuilding(element.tags)
+            };
+            
+            buildings.push(building);
+        }
+    });
     
-    let generationTimeEstimate;
-    if (totalObservations < 10000) {
-        generationTimeEstimate = "< 10 secondes";
-    } else if (totalObservations < 100000) {
-        generationTimeEstimate = "10-30 secondes";
-    } else if (totalObservations < 500000) {
-        generationTimeEstimate = "30 sec - 2 min";
-    } else if (totalObservations < 1000000) {
-        generationTimeEstimate = "2-5 minutes";
-    } else {
-        generationTimeEstimate = "5+ minutes";
-    }
+    return buildings;
+}
+
+/**
+ * Affiche les bâtiments sur la carte avec des couleurs selon le type
+ */
+function displayBuildingsOnMap(buildings) {
+    // Nettoyer les anciens marqueurs
+    clearBuildingMarkers();
     
-    let useCase;
-    if (totalObservations < 50000) {
-        useCase = "🧪 Test/Développement";
-    } else if (totalObservations < 500000) {
-        useCase = "📚 Recherche";
-    } else if (totalObservations < 2000000) {
-        useCase = "🤖 Machine Learning";
-    } else {
-        useCase = "🏭 Production";
-    }
-    
-    // Mise à jour de l'interface
-    const updates = {
-        'totalObservations': totalObservations.toLocaleString(),
-        'fileSize': fileSizeMB > 1 ? `${Math.round(fileSizeMB)} MB` : `${Math.round(fileSizeMB * 1024)} KB`,
-        'generationTime': generationTimeEstimate,
-        'useCase': useCase,
-        'freqInfo': freqDescription
+    const buildingColors = {
+        'residential': '#4CAF50',
+        'commercial': '#2196F3',
+        'industrial': '#FF9800',
+        'public': '#9C27B0',
+        'other': '#757575'
     };
     
-    Object.entries(updates).forEach(([id, value]) => {
+    buildings.forEach(building => {
+        if (building.geometry && building.geometry.length > 0) {
+            // Convertir la géométrie en coordonnées Leaflet
+            const coordinates = building.geometry.map(coord => [coord.lat, coord.lon]);
+            
+            const buildingType = building.building_class || 'other';
+            const color = buildingColors[buildingType] || buildingColors.other;
+            
+            // Créer un polygone pour le bâtiment
+            const polygon = L.polygon(coordinates, {
+                color: color,
+                weight: 2,
+                fillOpacity: 0.6
+            }).addTo(previewMap);
+            
+            // Ajouter une popup avec les informations du bâtiment
+            polygon.bindPopup(`
+                <div style="font-family: Arial; padding: 10px;">
+                    <h4 style="margin: 0 0 10px 0; color: ${color};">Bâtiment #${building.id}</h4>
+                    <p><strong>Type:</strong> ${building.type}</p>
+                    <p><strong>Classe:</strong> ${building.building_class}</p>
+                    <p><strong>Surface estimée:</strong> ${building.estimated_area}m²</p>
+                    <p><strong>Lieu:</strong> ${building.location}, ${building.state}</p>
+                </div>
+            `);
+            
+            buildingMarkers.push(polygon);
+        }
+    });
+    
+    // Ajuster la vue pour inclure tous les bâtiments
+    if (buildingMarkers.length > 0) {
+        const group = new L.featureGroup(buildingMarkers);
+        previewMap.fitBounds(group.getBounds().pad(0.1));
+    }
+}
+
+// ==================== GESTION DES DONNÉES ====================
+
+/**
+ * Gère la génération des données principales
+ */
+async function handleGenerate() {
+    if (!validateInputs()) {
+        return;
+    }
+    
+    try {
+        showLoading('🏗️ Génération des données en cours...');
+        updateLoadingStatus('Préparation des paramètres...');
+        
+        // Préparer les données de requête
+        const requestData = {
+            num_buildings: parseInt(document.getElementById('numBuildings').value),
+            start_date: document.getElementById('startDate').value,
+            end_date: document.getElementById('endDate').value,
+            freq: document.getElementById('freq').value,
+            zone_data: currentZoneData,
+            use_real_buildings: loadedBuildings.length > 0,
+            buildings_osm: loadedBuildings
+        };
+        
+        updateLoadingStatus('Envoi vers le serveur...');
+        
+        // Appel API
+        const response = await fetchWithTimeout(API_CONFIG.generateUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestData)
+        }, API_CONFIG.timeout);
+        
+        if (!response.ok) {
+            throw new Error(`Erreur serveur: ${response.status} - ${response.statusText}`);
+        }
+        
+        updateLoadingStatus('Traitement des résultats...');
+        const result = await response.json();
+        
+        hideLoading();
+        
+        // Afficher les résultats
+        displayResults(result);
+        
+        console.log('✅ Génération terminée avec succès');
+        
+    } catch (error) {
+        hideLoading();
+        console.error('❌ Erreur lors de la génération:', error);
+        showAlert(`Erreur: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Affiche les résultats de génération - VERSION CORRIGÉE
+ */
+function displayResults(data) {
+    console.log('📊 Affichage des résultats:', data);
+    
+    // Nettoyer l'affichage précédent
+    clearResults();
+    
+    try {
+        // 1. Afficher les statistiques générales
+        displayGeneralStats(data);
+        
+        // 2. Afficher l'aperçu des données
+        displayDataPreview(data);
+        
+        // 3. Afficher les graphiques si disponibles
+        if (data.charts) {
+            displayCharts(data.charts);
+        }
+        
+        // 4. Activer les boutons de téléchargement
+        enableDownloadButtons(data);
+        
+        // Faire défiler vers les résultats
+        document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+        
+        showAlert('✅ Génération terminée avec succès!', 'success');
+        
+    } catch (error) {
+        console.error('❌ Erreur affichage résultats:', error);
+        showAlert('Erreur lors de l\'affichage des résultats', 'error');
+    }
+}
+
+/**
+ * Affiche les statistiques générales
+ */
+function displayGeneralStats(data) {
+    const statsContainer = document.getElementById('statsGrid');
+    if (!statsContainer) return;
+    
+    // Extraire les statistiques de manière flexible
+    const stats = extractStats(data);
+    
+    let statsHTML = '<div class="stats-grid">';
+    
+    // Statistiques de base
+    if (stats.buildings_count) {
+        statsHTML += createStatCard('🏗️', 'Bâtiments', stats.buildings_count, 'générés');
+    }
+    
+    if (stats.records_count) {
+        statsHTML += createStatCard('📊', 'Enregistrements', stats.records_count.toLocaleString(), 'données');
+    }
+    
+    if (stats.period) {
+        statsHTML += createStatCard('📅', 'Période', stats.period, '');
+    }
+    
+    if (stats.location) {
+        statsHTML += createStatCard('📍', 'Localisation', stats.location, '');
+    }
+    
+    statsHTML += '</div>';
+    
+    statsContainer.innerHTML = statsHTML;
+    statsContainer.style.display = 'block';
+}
+
+/**
+ * Affiche l'aperçu des données - VERSION CORRIGÉE
+ */
+function displayDataPreview(data) {
+    const previewContainer = document.getElementById('dataPreview');
+    if (!previewContainer) return;
+    
+    let previewHTML = '<div class="data-preview-content">';
+    
+    // 1. Aperçu des bâtiments/métadonnées
+    const buildingsData = data.buildings || data.sample_buildings || data.metadata || [];
+    if (buildingsData.length > 0) {
+        previewHTML += generateBuildingsPreview(buildingsData.slice(0, 5));
+    }
+    
+    // 2. Aperçu des données temporelles
+    const timeseriesData = data.timeseries || data.consumption_data || data.data || [];
+    if (timeseriesData.length > 0) {
+        previewHTML += generateTimeseriesPreview(timeseriesData.slice(0, 10));
+    }
+    
+    // 3. Informations de qualité des données
+    if (data.data_quality || data.generation_info) {
+        previewHTML += generateQualityInfo(data.data_quality || data.generation_info);
+    }
+    
+    previewHTML += '</div>';
+    
+    previewContainer.innerHTML = previewHTML;
+    previewContainer.style.display = 'block';
+    
+    console.log('📋 Aperçu des données affiché');
+}
+
+/**
+ * Génère l'aperçu des bâtiments
+ */
+function generateBuildingsPreview(buildings) {
+    let html = `
+        <div class="preview-section">
+            <h4>🏗️ Aperçu des Bâtiments (${buildings.length} premiers)</h4>
+            <div class="table-responsive">
+                <table class="preview-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Type</th>
+                            <th>Localisation</th>
+                            <th>Classe</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+    `;
+    
+    buildings.forEach(building => {
+        html += `
+            <tr>
+                <td>${(building.id || building.building_id || building.unique_id || 'N/A').toString().substring(0, 8)}...</td>
+                <td><span class="badge badge-info">${building.type || building.building_type || 'N/A'}</span></td>
+                <td>${building.location || building.city || currentZoneData?.name || 'N/A'}</td>
+                <td>${building.building_class || building.class || 'N/A'}</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+    
+    return html;
+}
+
+/**
+ * Génère l'aperçu des données temporelles
+ */
+function generateTimeseriesPreview(timeseries) {
+    let html = `
+        <div class="preview-section">
+            <h4>⚡ Aperçu des Données de Consommation (${timeseries.length} premiers)</h4>
+            <div class="table-responsive">
+                <table class="preview-table">
+                    <thead>
+                        <tr>
+                            <th>ID Bâtiment</th>
+                            <th>Timestamp</th>
+                            <th>Consommation (kWh)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+    `;
+    
+    timeseries.forEach(record => {
+        const timestamp = record.ds || record.timestamp || record.date || 'N/A';
+        const consumption = record.y || record.consumption || record.value || 0;
+        const buildingId = record.unique_id || record.building_id || record.id || 'N/A';
+        
+        html += `
+            <tr>
+                <td>${buildingId.toString().substring(0, 8)}...</td>
+                <td>${timestamp}</td>
+                <td><strong>${consumption.toFixed(2)}</strong></td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+    
+    return html;
+}
+
+// ==================== UTILITAIRES ====================
+
+/**
+ * Extrait les statistiques de manière flexible depuis les données
+ */
+function extractStats(data) {
+    const stats = {};
+    
+    // Nombre de bâtiments
+    if (data.buildings) stats.buildings_count = data.buildings.length;
+    else if (data.sample_buildings) stats.buildings_count = data.sample_buildings.length;
+    else if (data.metadata) stats.buildings_count = data.metadata.length;
+    
+    // Nombre d'enregistrements
+    if (data.timeseries) stats.records_count = data.timeseries.length;
+    else if (data.consumption_data) stats.records_count = data.consumption_data.length;
+    else if (data.data) stats.records_count = data.data.length;
+    
+    // Période
+    if (data.period) stats.period = data.period;
+    else if (data.start_date && data.end_date) {
+        stats.period = `${data.start_date} → ${data.end_date}`;
+    }
+    
+    // Localisation
+    if (data.location) stats.location = data.location;
+    else if (currentZoneData) stats.location = currentZoneData.name;
+    
+    return stats;
+}
+
+/**
+ * Crée une carte de statistique
+ */
+function createStatCard(icon, label, value, unit) {
+    return `
+        <div class="stat-card">
+            <div class="stat-icon">${icon}</div>
+            <div class="stat-content">
+                <div class="stat-value">${value}</div>
+                <div class="stat-label">${label}</div>
+                <div class="stat-unit">${unit}</div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Utilitaire de fetch avec timeout
+ */
+async function fetchWithTimeout(url, options, timeout = 30000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        if (error.name === 'AbortError') {
+            throw new Error('Timeout: La requête a pris trop de temps');
+        }
+        throw error;
+    }
+}
+
+// ==================== GESTION UI ====================
+
+/**
+ * Affiche un indicateur de chargement
+ */
+function showLoading(message = 'Chargement en cours...') {
+    // Implémentation de l'indicateur de chargement
+    console.log(`⏳ ${message}`);
+}
+
+/**
+ * Cache l'indicateur de chargement
+ */
+function hideLoading() {
+    console.log('✅ Chargement terminé');
+}
+
+/**
+ * Met à jour le statut de chargement
+ */
+function updateLoadingStatus(message) {
+    console.log(`📄 Statut: ${message}`);
+}
+
+/**
+ * Affiche une alerte utilisateur
+ */
+function showAlert(message, type = 'info') {
+    const alertsContainer = document.getElementById('alerts');
+    if (alertsContainer) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type}`;
+        alertDiv.textContent = message;
+        alertsContainer.appendChild(alertDiv);
+        
+        // Supprimer l'alerte après 5 secondes
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.parentNode.removeChild(alertDiv);
+            }
+        }, 5000);
+    }
+    
+    console.log(`📢 [${type.toUpperCase()}] ${message}`);
+}
+
+/**
+ * Valide les inputs du formulaire
+ */
+function validateInputs() {
+    const numBuildings = document.getElementById('numBuildings')?.value;
+    const startDate = document.getElementById('startDate')?.value;
+    const endDate = document.getElementById('endDate')?.value;
+    
+    if (!numBuildings || numBuildings < 1) {
+        showAlert('Veuillez entrer un nombre de bâtiments valide', 'error');
+        return false;
+    }
+    
+    if (!startDate || !endDate) {
+        showAlert('Veuillez sélectionner des dates valides', 'error');
+        return false;
+    }
+    
+    if (new Date(startDate) >= new Date(endDate)) {
+        showAlert('La date de fin doit être après la date de début', 'error');
+        return false;
+    }
+    
+    return true;
+}
+
+// ==================== FONCTIONS D'INTERFACE ====================
+
+function updateZoneDisplay() {
+    if (!currentZoneData) return;
+    
+    const elements = {
+        'zoneNameDisplay': currentZoneData.name,
+        'zoneTypeDisplay': currentZoneData.type,
+        'zonePopulationDisplay': currentZoneData.population?.toLocaleString(),
+        'zoneAreaDisplay': 'Zone métropolitaine'
+    };
+    
+    Object.entries(elements).forEach(([id, value]) => {
         const element = document.getElementById(id);
-        if (element) {
+        if (element && value) {
             element.textContent = value;
         }
     });
 }
 
-// ==================== FONCTIONS PRINCIPALES - VERSION CORRIGÉE ====================
+function updateMapStatus(message) {
+    const statusElement = document.getElementById('mapStatus');
+    if (statusElement) {
+        statusElement.textContent = message;
+    }
+}
 
-async function generateData() {
-    console.log('🚀 Début génération...');
+function updateBuildingStats() {
+    const statsElement = document.getElementById('buildingTypesStats');
+    const countElement = document.getElementById('loadedBuildingsCount');
     
-    try {
-        showLoading(true);
-        hideResults();
-        
-        const params = getFormParams();
-        if (!params) {
-            console.error('❌ Paramètres invalides');
-            showLoading(false);
-            return;
-        }
-        
-        console.log('📤 Envoi requête:', params);
-        
-        const response = await fetch('/generate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(params)
+    if (countElement) {
+        countElement.textContent = loadedBuildings.length;
+    }
+    
+    if (statsElement && loadedBuildings.length > 0) {
+        const typeCount = {};
+        loadedBuildings.forEach(building => {
+            const type = building.building_class || 'other';
+            typeCount[type] = (typeCount[type] || 0) + 1;
         });
         
-        console.log('📥 Réponse reçue, status:', response.status);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-        
-        const data = await response.json();
-        console.log('✅ Données parsées:', data);
-        
-        showLoading(false);
-        
-        if (data.success) {
-            showResults(data);
-            console.log('🎉 Génération réussie!');
-        } else {
-            throw new Error(data.error || 'Erreur inconnue');
-        }
-        
-    } catch (error) {
-        console.error('❌ Erreur génération:', error);
-        showLoading(false);
-        showError(`Erreur de génération: ${error.message}`);
-    }
-}
-
-async function downloadData() {
-    console.log('💾 Début téléchargement...');
-    
-    try {
-        showLoading(true);
-        
-        const params = getFormParams();
-        if (!params) {
-            showLoading(false);
-            return;
-        }
-        
-        const response = await fetch('/download', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(params)
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
-        showLoading(false);
-        
-        if (data.success) {
-            showSuccess(`✅ Fichiers générés avec succès!\n${data.message}`);
-            
-            if (data.data_sources) {
-                showDataQualityInfo(data.data_sources);
-            }
-        } else {
-            throw new Error(data.error);
-        }
-        
-    } catch (error) {
-        console.error('❌ Erreur téléchargement:', error);
-        showLoading(false);
-        showError(`Erreur: ${error.message}`);
-    }
-}
-
-async function showSample() {
-    console.log('👁️ Génération échantillon...');
-    
-    try {
-        showLoading(true);
-        
-        const response = await fetch('/sample');
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        showLoading(false);
-        
-        if (data.success) {
-            showResults(data, true);
-        } else {
-            throw new Error(data.error);
-        }
-        
-    } catch (error) {
-        console.error('❌ Erreur échantillon:', error);
-        showLoading(false);
-        showError(`Erreur: ${error.message}`);
-    }
-}
-
-// ==================== GESTION DES PARAMÈTRES ====================
-
-function getFormParams() {
-    try {
-        const numBuildings = parseInt(document.getElementById('numBuildings')?.value);
-        const startDate = document.getElementById('startDate')?.value;
-        const endDate = document.getElementById('endDate')?.value;
-        const freq = document.getElementById('freq')?.value;
-        const locationMode = document.getElementById('locationMode')?.value;
-        
-        // Validations de base
-        if (!numBuildings || numBuildings <= 0) {
-            alert('⚠️ Veuillez spécifier un nombre de bâtiments valide');
-            return null;
-        }
-        
-        if (!startDate || !endDate) {
-            alert('⚠️ Veuillez spécifier les dates');
-            return null;
-        }
-        
-        if (new Date(startDate) >= new Date(endDate)) {
-            alert('⚠️ La date de début doit être antérieure à la date de fin');
-            return null;
-        }
-        
-        let params = {
-            num_buildings: numBuildings,
-            start_date: startDate,
-            end_date: endDate,
-            freq: freq || '30T'
-        };
-        
-        // Gestion du filtrage géographique
-        if (locationMode === 'filter') {
-            const region = document.getElementById('filterRegion')?.value;
-            const state = document.getElementById('filterState')?.value;
-            const city = document.getElementById('filterCity')?.value;
-            const popMin = document.getElementById('popMin')?.value;
-            const popMax = document.getElementById('popMax')?.value;
-            
-            if (region !== 'all' || state !== 'all' || city !== 'all' || popMin || popMax) {
-                params.location_filter = {
-                    region: region === 'all' ? null : region,
-                    state: state === 'all' ? null : state,
-                    city: city === 'all' ? null : city,
-                    population_min: popMin ? parseInt(popMin) : null,
-                    population_max: popMax ? parseInt(popMax) : null
-                };
-            }
-        } else if (locationMode === 'custom') {
-            const customCity = document.getElementById('customCity')?.value?.trim();
-            const customState = document.getElementById('customState')?.value?.trim();
-            const customRegion = document.getElementById('customRegion')?.value;
-            const customPop = document.getElementById('customPopulation')?.value;
-            const customLat = document.getElementById('customLat')?.value;
-            const customLon = document.getElementById('customLon')?.value;
-            
-            if (customCity && customState && customRegion && customPop) {
-                params.custom_location = {
-                    name: customCity,
-                    state: customState,
-                    region: customRegion,
-                    population: parseInt(customPop) || 100000,
-                    latitude: parseFloat(customLat) || 3.1390,
-                    longitude: parseFloat(customLon) || 101.6869
-                };
-            } else if (customCity || customState || customPop) {
-                alert('⚠️ Pour la localisation personnalisée, remplissez : ville, état, région et population');
-                return null;
-            }
-        }
-        
-        console.log('✅ Paramètres validés:', params);
-        return params;
-        
-    } catch (error) {
-        console.error('❌ Erreur validation paramètres:', error);
-        alert('⚠️ Erreur dans les paramètres du formulaire');
-        return null;
-    }
-}
-
-// ==================== AFFICHAGE DES RÉSULTATS - VERSION CORRIGÉE ====================
-
-function showLoading(show) {
-    const loading = document.getElementById('loading');
-    if (loading) {
-        loading.classList.toggle('show', show);
-    }
-}
-
-function hideResults() {
-    const results = document.getElementById('results');
-    const validationPanel = document.getElementById('validationPanel');
-    
-    if (results) results.classList.remove('show');
-    if (validationPanel) validationPanel.classList.remove('show');
-}
-
-function showResults(data, isSample = false) {
-    console.log('🎨 Affichage des résultats:', data);
-    
-    const resultsDiv = document.getElementById('results');
-    const alertsDiv = document.getElementById('alerts');
-    const statsDiv = document.getElementById('statsGrid');
-    const previewDiv = document.getElementById('dataPreview');
-    
-    if (!resultsDiv || !alertsDiv) {
-        console.error('❌ Éléments de résultats manquants');
-        return;
-    }
-    
-    // Message de succès
-    const dataSource = data.data_sources?.real_data_used ? 'VRAIES DONNÉES' : 'ESTIMATIONS';
-    const sourceEmoji = data.data_sources?.real_data_used ? '🎯' : '📊';
-    
-    alertsDiv.innerHTML = `
-        <div class="alert alert-success">
-            ${sourceEmoji} ${isSample ? 'Échantillon généré' : 'Données générées avec succès!'} 
-            - Source: ${dataSource}
-        </div>
-    `;
-    
-    // Statistiques - CORRECTION CRITIQUE: utiliser les bonnes clés
-    if (data.stats && statsDiv) {
-        const stats = data.stats;
-        statsDiv.innerHTML = `
-            <div class="stat-card">
-                <h3>${(stats.total_records || stats.buildings_count || 0).toLocaleString()}</h3>
-                <p>Bâtiments</p>
-            </div>
-            <div class="stat-card">
-                <h3>${(data.location_analysis?.length || 0)}</h3>
-                <p>Villes</p>
-            </div>
-            <div class="stat-card">
-                <h3>${(stats.avg_consumption || 0).toFixed(1)}</h3>
-                <p>Consommation Moy. (kWh)</p>
-            </div>
-            <div class="stat-card">
-                <h3>${(stats.max_consumption || 0).toFixed(1)}</h3>
-                <p>Pic Max (kWh)</p>
-            </div>
-        `;
-    }
-    
-    // Aperçu des données - CORRECTION CRITIQUE: gérer les différentes structures
-    if (previewDiv) {
-        let buildingsData = [];
-        let timeseriesData = [];
-        let locationAnalysis = [];
-        
-        // Extraction flexible des données selon la structure de réponse
-        if (data.buildings && Array.isArray(data.buildings)) {
-            buildingsData = data.buildings;
-        } else if (data.sample_buildings && Array.isArray(data.sample_buildings)) {
-            buildingsData = data.sample_buildings;
-        }
-        
-        if (data.timeseries && Array.isArray(data.timeseries)) {
-            timeseriesData = data.timeseries;
-        } else if (data.sample_timeseries && Array.isArray(data.sample_timeseries)) {
-            timeseriesData = data.sample_timeseries;
-        }
-        
-        if (data.location_analysis && Array.isArray(data.location_analysis)) {
-            locationAnalysis = data.location_analysis;
-        }
-        
-        console.log('📊 Données extraites:', {
-            buildings: buildingsData.length,
-            timeseries: timeseriesData.length,
-            locations: locationAnalysis.length
-        });
-        
-        let locationAnalysisHTML = '';
-        
-        if (locationAnalysis.length > 0) {
-            locationAnalysisHTML = `
-                <div style="margin-top: 20px;">
-                    <h4>🏙️ Analyse par Ville</h4>
-                    <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px;">
-            `;
-            
-            locationAnalysis.forEach(location => {
-                const isRealData = location.data_source === 'VRAIES DONNÉES';
-                const badge = isRealData ? 
-                    '<span class="data-quality-badge badge-official">OFFICIEL</span>' :
-                    '<span class="data-quality-badge badge-estimated">ESTIMÉ</span>';
-                
-                locationAnalysisHTML += `
-                    <div class="city-data-item ${isRealData ? 'official' : 'estimated'}">
-                        <div>
-                            <strong>${location.location}</strong> (${location.state || 'État inconnu'})
-                            <br><small>${(location.population || 0).toLocaleString()} hab. - ${location.building_count || 0} bâtiments</small>
-                        </div>
-                        <div>${badge}</div>
-                    </div>
-                `;
-            });
-            
-            locationAnalysisHTML += '</div></div>';
-        }
-        
-        // Affichage des bâtiments
-        let buildingsHTML = '';
-        if (buildingsData.length > 0) {
-            buildingsHTML = `
-                <h3>📋 Aperçu des Métadonnées - Villes de Malaisie</h3>
-                <div style="overflow-x: auto; margin-bottom: 30px;">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Classe</th>
-                                <th>Ville</th>
-                                <th>État</th>
-                                <th>Population</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${buildingsData.slice(0, 10).map(b => `
-                                <tr>
-                                    <td>${(b.unique_id || b.building_id || '').substring(0, 8)}...</td>
-                                    <td><strong>${b.building_class || 'N/A'}</strong></td>
-                                    <td>${b.location || 'N/A'}</td>
-                                    <td>${b.state || 'N/A'}</td>
-                                    <td>${(b.population || 0).toLocaleString()}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
+        let statsHTML = '';
+        Object.entries(typeCount).forEach(([type, count]) => {
+            statsHTML += `
+                <div class="stat-row">
+                    <span class="stat-type">${type}</span>
+                    <span class="stat-count">${count}</span>
                 </div>
             `;
-        }
-        
-        // Affichage des séries temporelles
-        let timeseriesHTML = '';
-        if (timeseriesData.length > 0) {
-            timeseriesHTML = `
-                <h3>⚡ Aperçu des Données de Consommation</h3>
-                <div style="overflow-x: auto;">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID Bâtiment</th>
-                                <th>Timestamp</th>
-                                <th>Consommation (kWh)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${timeseriesData.slice(0, 15).map(t => `
-                                <tr>
-                                    <td>${(t.unique_id || '').substring(0, 8)}...</td>
-                                    <td>${t.ds || t.timestamp ? new Date(t.ds || t.timestamp).toLocaleString('fr-FR') : 'N/A'}</td>
-                                    <td><strong>${t.y || 0}</strong></td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-        }
-        
-        // Assemblage final
-        previewDiv.innerHTML = `
-            <div class="data-preview">
-                ${locationAnalysisHTML}
-                ${buildingsHTML}
-                ${timeseriesHTML}
-                ${buildingsData.length === 0 && timeseriesData.length === 0 ? 
-                    '<div style="text-align: center; padding: 20px; color: #666;"><p>🔄 Aperçu des données en cours de génération...</p></div>' : ''
-                }
-            </div>
-        `;
-    }
-    
-    // Afficher les informations sur la qualité des données
-    if (data.data_sources) {
-        showDataQualityInfo(data.data_sources);
-    }
-    
-    // Validation si disponible
-    if (data.validation && data.validation.enabled) {
-        showValidation(data.validation);
-    }
-    
-    resultsDiv.classList.add('show');
-    console.log('✅ Résultats affichés avec succès');
-}
-
-function showValidation(validationData) {
-    const validationPanel = document.getElementById('validationPanel');
-    const validationScore = document.getElementById('validationScore');
-    const validationDetails = document.getElementById('validationDetails');
-    
-    if (!validationPanel || !validationScore || !validationDetails) return;
-    
-    validationScore.textContent = `${validationData.quality_score}%`;
-    
-    const scoreClass = validationData.quality_score >= 80 ? 'excellent' : 
-                      validationData.quality_score >= 70 ? 'good' : 
-                      validationData.quality_score >= 50 ? 'fair' : 'poor';
-    
-    validationScore.className = `validation-score ${scoreClass}`;
-    
-    let detailsHTML = `
-        <div style="text-align: center; margin-bottom: 15px;">
-            <strong>Grade: ${validationData.grade}</strong><br>
-            <small>Villes validées: ${validationData.cities_validated}</small>
-        </div>
-    `;
-    
-    if (validationData.recommendations && validationData.recommendations.length > 0) {
-        detailsHTML += '<h4>🔧 Recommandations:</h4><ul>';
-        validationData.recommendations.forEach(rec => {
-            detailsHTML += `<li>${rec.action || rec}</li>`;
         });
-        detailsHTML += '</ul>';
+        
+        statsElement.innerHTML = statsHTML;
     }
-    
-    validationDetails.innerHTML = detailsHTML;
-    validationPanel.classList.add('show');
 }
 
-function showDataQualityInfo(dataSources) {
-    const dataQualityPanel = document.getElementById('dataQualityPanel');
-    if (!dataQualityPanel) return;
-    
-    if (dataSources.real_data_used) {
-        dataQualityPanel.className = 'data-source-panel official';
-        dataQualityPanel.innerHTML = `
-            <h3>🎯 VRAIES DONNÉES UTILISÉES</h3>
-            <p><strong>Qualité:</strong> ${dataSources.data_quality}</p>
-            <p><strong>Sources:</strong> Ministry of Health Malaysia, Ministry of Education, Tourism Malaysia</p>
-            <div style="margin-top: 15px;">
-                <span class="data-quality-badge badge-official">DONNÉES OFFICIELLES</span>
-            </div>
-        `;
+function clearResults() {
+    ['statsGrid', 'dataPreview'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.innerHTML = '';
+            element.style.display = 'none';
+        }
+    });
+}
+
+function clearBuildingMarkers() {
+    buildingMarkers.forEach(marker => {
+        if (previewMap && previewMap.hasLayer(marker)) {
+            previewMap.removeLayer(marker);
+        }
+    });
+    buildingMarkers = [];
+}
+
+function clearMapPreview() {
+    clearBuildingMarkers();
+    loadedBuildings = [];
+    updateBuildingStats();
+    updateMapStatus('Carte nettoyée');
+    console.log('🧹 Aperçu de carte nettoyé');
+}
+
+function centerOnSelectedZone() {
+    if (currentZoneData && previewMap) {
+        previewMap.setView([currentZoneData.lat, currentZoneData.lon], 12);
+        updateMapStatus(`Centré sur ${currentZoneData.name}`);
     } else {
-        dataQualityPanel.className = 'data-source-panel estimated';
-        dataQualityPanel.innerHTML = `
-            <h3>📊 ESTIMATIONS UTILISÉES</h3>
-            <p><strong>Qualité:</strong> ${dataSources.data_quality}</p>
-            <p><strong>Méthode:</strong> Distribution intelligente basée sur population</p>
-            <div style="margin-top: 15px;">
-                <span class="data-quality-badge badge-estimated">ESTIMATIONS</span>
-            </div>
-        `;
+        showAlert('Veuillez d\'abord sélectionner une zone', 'warning');
     }
-    
-    dataQualityPanel.style.display = 'block';
 }
 
-function showSuccess(message) {
-    const alertsDiv = document.getElementById('alerts');
-    const resultsDiv = document.getElementById('results');
+function handleZoneSelection(event) {
+    const selectedCity = event.target.value;
+    if (selectedCity && malaysiaCitiesData[selectedCity]) {
+        selectCity(selectedCity, malaysiaCitiesData[selectedCity]);
+    }
+}
+
+function validateInterface() {
+    const requiredElements = ['generateBtn', 'previewMap', 'numBuildings', 'startDate', 'endDate'];
+    const missing = requiredElements.filter(id => !document.getElementById(id));
     
-    if (!alertsDiv || !resultsDiv) return;
+    if (missing.length > 0) {
+        console.warn('⚠️ Éléments manquants:', missing);
+    } else {
+        console.log('✅ Interface validée');
+    }
+}
+
+// ==================== UTILITAIRES BÂTIMENTS ====================
+
+function calculateBuildingArea(geometry) {
+    // Calcul approximatif de l'aire d'un bâtiment
+    if (!geometry || geometry.length < 3) return 0;
     
-    const dataSource = systemCapabilities.real_data_available ? '🎯 VRAIES DONNÉES' : '📊 ESTIMATIONS';
+    // Formule de Shoelace pour calculer l'aire d'un polygone
+    let area = 0;
+    const n = geometry.length;
     
-    alertsDiv.innerHTML = `
-        <div class="alert alert-success">
-            ${message}
-            <br><small>Source: ${dataSource}</small>
+    for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        area += geometry[i].lat * geometry[j].lon;
+        area -= geometry[j].lat * geometry[i].lon;
+    }
+    
+    // Convertir en mètres carrés approximatifs
+    return Math.abs(area * 111000 * 111000 / 2);
+}
+
+function classifyBuilding(tags) {
+    if (!tags) return 'residential';
+    
+    const buildingType = tags.building;
+    
+    if (['residential', 'house', 'apartment', 'apartments'].includes(buildingType)) {
+        return 'residential';
+    } else if (['commercial', 'retail', 'shop', 'office'].includes(buildingType)) {
+        return 'commercial';
+    } else if (['industrial', 'warehouse', 'factory'].includes(buildingType)) {
+        return 'industrial';
+    } else if (['public', 'school', 'hospital', 'government'].includes(buildingType)) {
+        return 'public';
+    }
+    
+    return 'other';
+}
+
+// ==================== FONCTIONS DE TÉLÉCHARGEMENT ====================
+
+function enableDownloadButtons(data) {
+    // Créer ou mettre à jour les boutons de téléchargement
+    const downloadContainer = document.getElementById('downloadButtons') || createDownloadContainer();
+    
+    downloadContainer.innerHTML = `
+        <div class="download-buttons">
+            <h4>📥 Télécharger les données</h4>
+            <div class="button-group">
+                <button onclick="downloadJSON()" class="btn btn-primary">
+                    📄 JSON
+                </button>
+                <button onclick="downloadCSV()" class="btn btn-success">
+                    📊 CSV
+                </button>
+                <button onclick="downloadExcel()" class="btn btn-info">
+                    📈 Excel
+                </button>
+            </div>
         </div>
     `;
     
-    resultsDiv.classList.add('show');
+    // Stocker les données pour le téléchargement
+    window.lastGeneratedData = data;
 }
 
-function showError(message) {
-    const alertsDiv = document.getElementById('alerts');
-    const resultsDiv = document.getElementById('results');
+function createDownloadContainer() {
+    const container = document.createElement('div');
+    container.id = 'downloadButtons';
+    container.className = 'download-container';
     
-    if (!alertsDiv || !resultsDiv) {
-        console.error('❌ Impossible d\'afficher l\'erreur:', message);
-        alert(`Erreur: ${message}`);
+    const resultsSection = document.getElementById('results');
+    if (resultsSection) {
+        resultsSection.appendChild(container);
+    }
+    
+    return container;
+}
+
+function downloadJSON() {
+    if (!window.lastGeneratedData) {
+        showAlert('Aucune donnée à télécharger', 'error');
         return;
     }
     
-    alertsDiv.innerHTML = `
-        <div class="alert alert-error">❌ ${message}</div>
-    `;
+    const dataStr = JSON.stringify(window.lastGeneratedData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
     
-    resultsDiv.classList.add('show');
+    downloadFile(dataBlob, 'malaysia_energy_data.json');
+}
+
+function downloadCSV() {
+    if (!window.lastGeneratedData) {
+        showAlert('Aucune donnée à télécharger', 'error');
+        return;
+    }
+    
+    // Convertir les données en CSV
+    const timeseries = window.lastGeneratedData.timeseries || 
+                      window.lastGeneratedData.consumption_data || 
+                      window.lastGeneratedData.data || [];
+    
+    if (timeseries.length === 0) {
+        showAlert('Aucune donnée temporelle à exporter', 'error');
+        return;
+    }
+    
+    let csvContent = 'building_id,timestamp,consumption_kwh\n';
+    
+    timeseries.forEach(record => {
+        const buildingId = record.unique_id || record.building_id || record.id || '';
+        const timestamp = record.ds || record.timestamp || record.date || '';
+        const consumption = record.y || record.consumption || record.value || 0;
+        
+        csvContent += `${buildingId},${timestamp},${consumption}\n`;
+    });
+    
+    const csvBlob = new Blob([csvContent], { type: 'text/csv' });
+    downloadFile(csvBlob, 'malaysia_energy_timeseries.csv');
+}
+
+function downloadExcel() {
+    showAlert('Fonction Excel en développement', 'info');
+}
+
+function downloadFile(blob, filename) {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    
+    document.body.appendChild(a);
+    a.click();
+    
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+    showAlert(`✅ Fichier ${filename} téléchargé`, 'success');
 }
 
 // ==================== FONCTIONS DE DÉBOGAGE ====================
 
 function debugApp() {
-    console.log('🐛 DEBUG - État de l\'application:');
-    console.log('- malaysiaData:', Object.keys(malaysiaData).length, 'villes');
-    console.log('- systemCapabilities:', systemCapabilities);
+    console.log('🔍 DIAGNOSTIC DE L\'APPLICATION');
+    console.log('================================');
+    console.log('Zone actuelle:', currentZoneData);
+    console.log('Bâtiments chargés:', loadedBuildings.length);
+    console.log('Carte initialisée:', !!previewMap);
+    console.log('Données Malaysia:', Object.keys(malaysiaCitiesData).length, 'villes');
     
-    // Vérifier éléments DOM critiques
-    const criticalElements = [
-        'dataStatusIndicator', 'systemStatus', 'realDataPanel',
-        'numBuildings', 'startDate', 'endDate', 'freq',
-        'locationMode', 'filterRegion', 'loading', 'results', 'alerts',
-        'statsGrid', 'dataPreview'
-    ];
-    
-    const elementStatus = {};
-    criticalElements.forEach(id => {
+    // Vérifier les éléments DOM
+    const elements = ['generateBtn', 'previewMap', 'numBuildings', 'startDate', 'endDate', 'results', 'dataPreview'];
+    elements.forEach(id => {
         const element = document.getElementById(id);
-        elementStatus[id] = element ? '✅' : '❌';
+        console.log(`Élément ${id}:`, element ? '✅' : '❌');
     });
     
-    console.table(elementStatus);
-    
-    // Test des paramètres actuels
-    const currentParams = getFormParams();
-    console.log('- Paramètres actuels:', currentParams);
-    
     return {
-        malaysiaData: Object.keys(malaysiaData).length,
-        systemCapabilities,
-        elementStatus,
-        currentParams
+        currentZone: currentZoneData,
+        buildingsCount: loadedBuildings.length,
+        mapInitialized: !!previewMap,
+        citiesLoaded: Object.keys(malaysiaCitiesData).length
     };
 }
 
-async function testAPI() {
-    console.log('🔗 Test de connectivité API...');
-    const results = {};
-    
-    try {
-        console.log('Testing /api/stats...');
-        const statsResponse = await fetch('/api/stats');
-        results.stats = {
-            status: statsResponse.status,
-            ok: statsResponse.ok,
-            data: statsResponse.ok ? await statsResponse.json() : null
-        };
-    } catch (error) {
-        results.stats = { error: error.message };
-    }
-    
-    try {
-        console.log('Testing /api/real-data-status...');
-        const statusResponse = await fetch('/api/real-data-status');
-        results.realDataStatus = {
-            status: statusResponse.status,
-            ok: statusResponse.ok,
-            data: statusResponse.ok ? await statusResponse.json() : null
-        };
-    } catch (error) {
-        results.realDataStatus = { error: error.message };
-    }
-    
-    try {
-        console.log('Testing /sample...');
-        const sampleResponse = await fetch('/sample');
-        results.sample = {
-            status: sampleResponse.status,
-            ok: sampleResponse.ok,
-            data: sampleResponse.ok ? await sampleResponse.json() : null
-        };
-    } catch (error) {
-        results.sample = { error: error.message };
-    }
-    
-    console.table(results);
-    return results;
+function testConnection() {
+    return fetch('/health')
+        .then(response => {
+            if (response.ok) {
+                showAlert('✅ Connexion serveur OK', 'success');
+                return true;
+            } else {
+                showAlert('❌ Problème de connexion serveur', 'error');
+                return false;
+            }
+        })
+        .catch(error => {
+            showAlert('❌ Serveur inaccessible', 'error');
+            return false;
+        });
 }
 
-function resetApp() {
-    console.log('🔄 Réinitialisation...');
-    
-    // Reset formulaire
-    const elements = ['numBuildings', 'startDate', 'endDate', 'freq'];
-    const defaults = { 'numBuildings': 50, 'startDate': '2024-01-01', 'endDate': '2024-01-31', 'freq': '30T' };
-    
-    elements.forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.value = defaults[id] || '';
-        }
-    });
-    
-    // Reset sélecteurs
-    const selectors = ['locationMode', 'filterRegion', 'filterState', 'filterCity'];
-    selectors.forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.selectedIndex = 0;
-        }
-    });
-    
-    hideResults();
-    toggleLocationMode();
-    updateEstimation();
-    
-    console.log('✅ Application réinitialisée');
-}
+// ==================== INITIALISATION FINALE ====================
 
-function helpApp() {
-    const help = `
-🇲🇾 AIDE - GÉNÉRATEUR ÉLECTRICITÉ MALAYSIA
-=========================================
-
-🔧 FONCTIONS DE DÉBOGAGE:
-debugApp()    - État de l'application
-testAPI()     - Test connectivité API
-resetApp()    - Réinitialiser interface
-
-🎯 FONCTIONS PRINCIPALES:
-generateData()     - Générer et afficher
-downloadData()     - Générer et télécharger
-showSample()       - Afficher échantillon
-
-📊 VÉRIFICATIONS:
-- Vérifiez la console pour les erreurs
-- Utilisez F12 pour ouvrir les outils développeur
-- Testez avec un petit échantillon d'abord
-
-🆘 PROBLÈMES COURANTS:
-1. Erreur 500: Problème serveur, vérifiez les logs
-2. Pas de réponse: Vérifiez la connexion
-3. Interface figée: Rafraîchissez (F5)
-4. Paramètres invalides: Vérifiez les champs
-5. Résultats vides: Vérifiez la structure des données
-
-💡 CONSEILS:
-- Commencez avec 5-10 bâtiments
-- Utilisez une période courte (1 semaine)
-- Vérifiez que les dates sont valides
-- Ouvrez les outils développeur pour plus d'infos
-`;
-    
-    console.log(help);
-    return help;
-}
-
-// Exposer les fonctions de débogage globalement
+// Exposer les fonctions pour le debugging
 window.debugApp = debugApp;
-window.testAPI = testAPI;
-window.resetApp = resetApp;
-window.helpApp = helpApp;
+window.testConnection = testConnection;
+window.loadRealBuildings = loadRealBuildings;
+window.downloadJSON = downloadJSON;
+window.downloadCSV = downloadCSV;
+window.downloadExcel = downloadExcel;
 
-// ==================== GESTION D'ERREURS GLOBALES ====================
-
-window.addEventListener('error', function(e) {
-    console.error('🚨 Erreur JavaScript:', e.message, 'à', e.filename + ':' + e.lineno);
-});
-
-window.addEventListener('unhandledrejection', function(e) {
-    console.error('🚨 Promesse rejetée:', e.reason);
-});
-
-// ==================== VÉRIFICATIONS FINALES ====================
-
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('📄 DOM chargé, vérifications finales...');
-    
-    // Vérifier éléments essentiels
-    const essential = ['numBuildings', 'startDate', 'endDate', 'freq', 'results', 'alerts', 'statsGrid', 'dataPreview'];
-    const missing = essential.filter(id => !document.getElementById(id));
-    
-    if (missing.length > 0) {
-        console.error('❌ Éléments manquants:', missing);
-        alert('⚠️ Interface incomplète. Rechargez la page.');
-    } else {
-        console.log('✅ Tous les éléments essentiels présents');
-    }
-    
-    // Vérification retardée
-    setTimeout(() => {
-        if (Object.keys(malaysiaData).length === 0) {
-            console.warn('⚠️ Rechargement données Malaysia...');
-            loadMalaysiaData();
-        }
-    }, 3000);
-});
-
-// Message de bienvenue
+// Message de chargement complet
 console.log(`
-🇲🇾 GÉNÉRATEUR MALAYSIA - VERSION CORRIGÉE AFFICHAGE
-=====================================================
-✅ JavaScript fonctionnel chargé
+🇲🇾 GÉNÉRATEUR MALAYSIA - FRONTEND CORRIGÉ
+==========================================
+✅ Script principal chargé
+🗺️ Système de cartographie opérationnel  
+📊 Affichage des données corrigé
 🔧 Fonctions de débogage disponibles
-🎯 Support vraies données officielles
-🐛 Gestion d'erreurs améliorée
-📊 Affichage des résultats corrigé
-
-Pour déboguer: debugApp()
-Pour aide: helpApp()
-Pour test API: testAPI()
+📥 Système de téléchargement intégré
 
 CORRECTIFS APPLIQUÉS:
-- Structure flexible des données de réponse
-- Gestion des différents formats (buildings/sample_buildings)
+- Affichage flexible des données
+- Gestion robuste des réponses API
+- Cartographie interactive complète
 - Extraction sécurisée des statistiques
-- Affichage robuste même avec données partielles
-- Debugging amélioré pour identifier les problèmes
+- Interface utilisateur améliorée
 
-Prêt à générer des données pour Malaysia! 🚀
+Pour déboguer: debugApp()
+Pour tester la connexion: testConnection()
+
+Prêt à générer des données Malaysia! 🚀
 `);
-
-// Auto-test au chargement (optionnel)
-setTimeout(() => {
-    if (window.location.search.includes('debug=true')) {
-        console.log('🔍 Auto-diagnostic activé...');
-        debugApp();
-    }
-}, 5000);
